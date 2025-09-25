@@ -4,9 +4,9 @@ After=network.target midi-web.service
 
 [Service]
 Type=simple
-User=swag
-WorkingDirectory=/home/swag/Documents/git/midiTrackerApp
-ExecStart=/bin/sh /home/swag/Documents/git/midiTrackerApp/start_main.sh
+User=pi
+WorkingDirectory=/home/pi/OneDrive\x20-\x20UTS/PersonalProjects/midi_tracker/midiTrackerApp
+ExecStart=/bin/sh start_main.sh
 Restart=on-failure
 Environment=PYTHONUNBUFFERED=1
 
