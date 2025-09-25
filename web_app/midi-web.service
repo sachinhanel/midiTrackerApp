@@ -5,7 +5,7 @@ After=network.target
 [Service]
 Type=simple
 User=pi
-WorkingDirectory=/home/pi/OneDrive\ -\ UTS/PersonalProjects/midi_tracker/midiTrackerApp/web_app
+WorkingDirectory=/home/pi/OneDrive\x20-\x20UTS/PersonalProjects/midi_tracker/midiTrackerApp/web_app
 ExecStart=/bin/sh start_web.sh
 Restart=on-failure
 Environment=PYTHONUNBUFFERED=1
