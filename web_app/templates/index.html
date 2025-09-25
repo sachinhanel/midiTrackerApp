@@ -1,0 +1,29 @@
+{% extends "layout.html" %}
+{% block content %}
+<section id="dashboard">
+  <h2>Live Dashboard</h2>
+  <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;">
+    <div>Live status: <span id="live_status">DISCONNECTED</span></div>
+    <div>Last update: <span id="last_update">—</span></div>
+  </div>
+  <div class="panel">
+    <h3>Active Notes</h3>
+    <div id="active_notes">—</div>
+  </div>
+
+  <div class="panel">
+    <h3>Throughput</h3>
+    <div id="throughput">0 B/s</div>
+  </div>
+
+  <div class="panel">
+    <h3>Pedal</h3>
+    <div id="pedal">Up</div>
+  </div>
+
+  <div class="panel">
+    <h3>Debug</h3>
+    <pre id="debug" style="max-height:260px;overflow:auto;white-space:pre-wrap;"></pre>
+  </div>
+</section>
+{% endblock %}

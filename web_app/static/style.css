@@ -1,0 +1,23 @@
+body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+header { background: #0b5fa5; color: white; padding: 12px 16px; }
+header h1 { margin: 0; font-size: 18px; }
+header nav { margin-top: 6px; }
+header a { color: #e6f2fb; text-decoration: none; margin-right: 8px; }
+main { padding: 16px; }
+.panel { background: #fff; border: 1px solid #ddd; padding: 12px; margin-bottom: 12px; border-radius: 6px; }
+#top_totals_box .small_total_card { background:#f1f7fb; padding:8px 12px; border-radius:6px; border:1px solid #e0eef9; text-align:center; }
+#top_totals_box .small_total_value { font-weight:bold; font-size:16px; }
+#active_notes { font-family: monospace; font-size: 18px; }
+.large { font-size: 28px; font-weight: bold; }
+pre { max-height: 240px; overflow: auto; background: #f7f7f7; padding: 8px; }
+footer { padding: 8px 16px; font-size: 12px; color: #666; }
+
+/* Stats tables */
+.compact_table, .note_dist_table { width:100%; border-collapse: collapse; font-size:13px; }
+.compact_table th, .compact_table td, .note_dist_table th, .note_dist_table td { border-bottom: 1px solid #e6e6e6; padding:6px 8px; }
+.note_dist_table th { background:#f5f9fb; text-transform: capitalize; }
+.note_dist_table tr:nth-child(even) { background: #fafafa; }
+.pager { margin-bottom:8px; display:flex; gap:8px; align-items:center; }
+.total_card { background:#fff; border:1px solid #eee; padding:8px 12px; border-radius:6px; text-align:center; }
+.total_value { font-size:20px; font-weight:bold; }
+.total_label { font-size:12px; color:#666; }

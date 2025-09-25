@@ -1,0 +1,14 @@
+[Unit]
+Description=MIDI Tracker Main App
+After=network.target midi-web.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/OneDrive\ -\ UTS/PersonalProjects/midi_tracker/midiTrackerApp
+ExecStart=/bin/sh start_main.sh
+Restart=on-failure
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target

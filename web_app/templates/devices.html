@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+{% block content %}
+<section id="devices">
+  <h2>MIDI Devices</h2>
+  <div class="panel">
+    <button id="refresh_devices">Refresh</button>
+    <ul id="device_list"></ul>
+  </div>
+  <div class="panel">
+    <h4>Choose device</h4>
+    <select id="device_select"></select>
+    <button id="select_btn">Select & Connect</button>
+    <div id="device_status"></div>
+  </div>
+</section>
+<script src="/static/devices.js"></script>
+{% endblock %}

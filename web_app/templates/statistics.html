@@ -1,0 +1,75 @@
+{% extends "layout.html" %}
+{% block content %}
+<section id="stats">
+  <h2>Statistics</h2>
+
+  <!-- Top small totals box -->
+  <div id="top_totals_box" style="display:flex; gap:12px; margin-bottom:12px;">
+  <div class="small_total_card"><div class="small_total_value" id="total_notes_top">-</div><div class="small_total_label">All-time Notes</div></div>
+  <div class="small_total_card"><div class="small_total_value" id="total_energy_top">-</div><div class="small_total_label">All-time Energy (J)</div></div>
+  <div class="small_total_card"><div class="small_total_value" id="total_note_hours_top">-</div><div class="small_total_label">Note Duration (hrs)</div></div>
+    <div class="small_total_card"><div class="small_total_value" id="total_practice_hours_top">-</div><div class="small_total_label">Practice Hours</div></div>
+    <div class="small_total_card"><div class="small_total_value" id="total_pedal_presses_top">-</div><div class="small_total_label">Pedal Presses</div></div>
+    <div class="small_total_card"><div class="small_total_value" id="total_midi_mb_top">-</div><div class="small_total_label">MIDI data (MB)</div></div>
+  </div>
+
+  <div class="panel">
+    <h3>View</h3>
+    <label for="range_select">Range:</label>
+    <select id="range_select">
+      <option value="hourly">Hourly</option>
+      <option value="daily" selected>Daily</option>
+      <option value="weekly">Weekly</option>
+      <option value="monthly">Monthly</option>
+      <option value="trends">Trends</option>
+    </select>
+
+    <label for="y_select">Y axis:</label>
+    <select id="y_select">
+      <option value="total_notes">Total Notes</option>
+      <option value="total_energy" selected>Energy (J)</option>
+      <option value="session_seconds">Session Time (s)</option>
+    </select>
+  </div>
+
+  <div class="panel">
+    <h3 id="chart_title">Time Series</h3>
+    <div style="height:320px;"><canvas id="stats_chart" width="900" height="300"></canvas></div>
+  </div>
+
+  <div class="panel">
+    <h3>Data</h3>
+    <div id="stats_table">Loading…</div>
+  </div>
+
+  <div class="panel">
+    <h3>Note Distribution (Per-Day)</h3>
+  <label for="dist_date">Date:</label>
+  <button id="dist_prev">Prev</button>
+  <input type="date" id="dist_date" />
+  <button id="dist_next">Next</button>
+  <label style="margin-left:12px;">Heatmap:</label>
+  <button id="heatmap_refresh">Refresh Heatmap</button>
+    <div id="heatmap_area" style="margin-top:12px; display:flex; gap:12px; align-items:flex-start; position:relative;">
+      <canvas id="heatmap_piano" width="900" height="120" style="border:1px solid #ccc;"></canvas>
+      <div style="width:220px;">
+        <div id="heatmap_legend"></div>
+      </div>
+      <div id="heatmap_tooltip" style="position:absolute; pointer-events:none; display:none; background:rgba(0,0,0,0.8); color:#fff; padding:6px 8px; border-radius:4px; font-size:12px;
+           transform:translate(-50%,-120%);"></div>
+    </div>
+    <div id="big_totals" style="margin-top:10px; display:flex; gap:20px;">
+      <div class="total_card"><div class="total_value" id="total_notes">-</div><div class="total_label">Total Notes</div></div>
+      <div class="total_card"><div class="total_value" id="total_energy">-</div><div class="total_label">Total Energy (J)</div></div>
+      <div class="total_card"><div class="total_value" id="avg_velocity">-</div><div class="total_label">Avg Velocity</div></div>
+    </div>
+    <div id="note_distribution_table" style="margin-top:12px; overflow:auto; max-height:360px;">Loading…</div>
+  </div>
+
+</section>
+  <!-- Luxon + Chart.js + adapter for time scale -->
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.0.1/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon"></script>
+  <script src="/static/stats.js"></script>
+{% endblock %}
