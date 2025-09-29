@@ -1,25 +1,34 @@
 sudo tee /etc/systemd/system/midi-main.service >/dev/null <<'UNIT'
 [Unit]
-Description=MIDI Tracker Main App
-After=network.target
+Description=MIDI Tracker Main App (GUI on :0)
+# Wait for the desktop to be up so Tk has a display
+After=graphical.target
+Wants=graphical.target
 
 [Service]
 Type=simple
 User=swag
-# main.py lives in the project root
 WorkingDirectory=/home/swag/Documents/git/midiTrackerApp
 
-# Use the same venv as the web app (adjust if you created a different one)
+# Use your shared venv
 Environment="VIRTUAL_ENV=/home/swag/Documents/git/.venv"
 Environment="PATH=/home/swag/Documents/git/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 Environment=PYTHONUNBUFFERED=1
 
-# Run main.py with the venv's python
-ExecStart=/home/swag/Documents/git/.venv/bin/python /home/swag/Documents/git/midiTrackerApp/main.py
+# Point to your desktop session
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/swag/.Xauthority
+# Helpful for some libs on Wayland/X11 bridges:
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 
+ExecStart=/home/swag/Documents/git/.venv/bin/python /home/swag/Documents/git/midiTrackerApp/main.py
 Restart=on-failure
 RestartSec=2
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
 UNIT
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now midi-main.service
+systemctl status midi-main.service --no-pager
