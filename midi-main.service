@@ -1,14 +1,25 @@
+sudo tee /etc/systemd/system/midi-main.service >/dev/null <<'UNIT'
 [Unit]
 Description=MIDI Tracker Main App
-After=network.target midi-web.service
+After=network.target
 
 [Service]
 Type=simple
 User=swag
+# main.py lives in the project root
 WorkingDirectory=/home/swag/Documents/git/midiTrackerApp
-ExecStart=/bin/sh /home/swag/Documents/git/midiTrackerApp/start_main.sh
-Restart=on-failure
+
+# Use the same venv as the web app (adjust if you created a different one)
+Environment="VIRTUAL_ENV=/home/swag/Documents/git/.venv"
+Environment="PATH=/home/swag/Documents/git/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 Environment=PYTHONUNBUFFERED=1
+
+# Run main.py with the venv's python
+ExecStart=/home/swag/Documents/git/.venv/bin/python /home/swag/Documents/git/midiTrackerApp/main.py
+
+Restart=on-failure
+RestartSec=2
 
 [Install]
 WantedBy=multi-user.target
+UNIT

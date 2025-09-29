@@ -1,20 +1,19 @@
 #!/bin/sh
-# Small wrapper to start the web server (useful for systemd)
-cd "$(dirname "$0")"
-# Robust virtualenv handling: prefer web_app/.venv, then ../.venv. If missing, fall back to system python3.
-if [ -f ".venv/bin/activate" ]; then
-  # shellcheck disable=SC1091
-  . .venv/bin/activate
-  exec python server.py
-elif [ -f "../.venv/bin/activate" ]; then
-  # shellcheck disable=SC1091
-  . ../.venv/bin/activate
-  exec python server.py
+set -eu
+
+APP_DIR="/home/swag/Documents/git/midiTrackerApp/web_app"
+VENV="/home/swag/Documents/git/.venv"
+
+cd "$APP_DIR"
+
+# Prefer the known venv; fall back to local ones; else system Python.
+if [ -x "$VENV/bin/python" ]; then
+  exec "$VENV/bin/python" server.py
 elif [ -x ".venv/bin/python" ]; then
-  exec .venv/bin/python server.py
+  exec ".venv/bin/python" server.py
 elif [ -x "../.venv/bin/python" ]; then
-  exec ../.venv/bin/python server.py
+  exec "../.venv/bin/python" server.py
 else
-  echo "Warning: virtualenv not found in .venv or ../.venv — falling back to system python3" >&2
+  echo "Warning: no venv at $VENV, .venv, or ../.venv — using system python3" >&2
   exec python3 server.py
 fi

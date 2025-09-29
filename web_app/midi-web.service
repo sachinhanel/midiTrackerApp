@@ -6,9 +6,12 @@ After=network.target
 Type=simple
 User=swag
 WorkingDirectory=/home/swag/Documents/git/midiTrackerApp/web_app
-ExecStart=/bin/sh /home/swag/Documents/git/midiTrackerApp/web_app/start_web.sh
-Restart=on-failure
+Environment="VIRTUAL_ENV=/home/swag/Documents/git/midiTrackerApp/.venv"
+Environment="PATH=/home/swag/Documents/git/midiTrackerApp/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/swag/Documents/git/midiTrackerApp/.venv/bin/python /home/swag/Documents/git/midiTrackerApp/web_app/server.py
+Restart=on-failure
+RestartSec=2
 
 [Install]
 WantedBy=multi-user.target
