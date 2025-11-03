@@ -122,9 +122,9 @@ def api_daily_stats():
     # Query daily_stats table for last 30 days
     try:
         cur = db.conn.cursor()
-        cur.execute("SELECT date, total_notes, total_energy, session_time_seconds, avg_velocity FROM daily_stats ORDER BY date DESC LIMIT 60")
+        cur.execute("SELECT date, total_notes, session_time_seconds, total_energy, avg_velocity FROM daily_stats ORDER BY date DESC LIMIT 60")
         rows = cur.fetchall()
-        data = [{'date': r[0], 'total_notes': r[1], 'total_energy': r[2], 'session_seconds': r[3], 'avg_velocity': r[4]} for r in rows]
+        data = [{'date': r[0], 'total_notes': r[1], 'session_seconds': r[2], 'total_energy': r[3], 'avg_velocity': r[4]} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -134,9 +134,9 @@ def api_daily_stats():
 def api_hourly_stats():
     try:
         cur = db.conn.cursor()
-        cur.execute("SELECT date, hour, total_notes, total_energy, session_time_seconds FROM hourly_stats ORDER BY date DESC, hour DESC LIMIT 240")
+        cur.execute("SELECT date, hour, total_notes, session_time_seconds, total_energy FROM hourly_stats ORDER BY date DESC, hour DESC LIMIT 240")
         rows = cur.fetchall()
-        data = [{'date': r[0], 'hour': r[1], 'total_notes': r[2], 'total_energy': r[3], 'session_seconds': r[4]} for r in rows]
+        data = [{'date': r[0], 'hour': r[1], 'total_notes': r[2], 'session_seconds': r[3], 'total_energy': r[4]} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -148,9 +148,10 @@ def api_weekly_stats():
         cur = db.conn.cursor()
         # Aggregate daily rows into ISO week buckets (strftime('%Y-%W') groups by year-week)
         cur.execute("""
-            SELECT sub.week AS week_key, MIN(sub.date) AS week_start, SUM(sub.total_notes) AS total_notes, SUM(sub.total_energy) AS total_energy
+            SELECT sub.week AS week_key, MIN(sub.date) AS week_start, SUM(sub.total_notes) AS total_notes,
+                   SUM(sub.session_time_seconds) AS session_seconds, SUM(sub.total_energy) AS total_energy
             FROM (
-                SELECT date, total_notes, total_energy, strftime('%Y-%W', date) AS week
+                SELECT date, total_notes, session_time_seconds, total_energy, strftime('%Y-%W', date) AS week
                 FROM daily_stats
             ) AS sub
             GROUP BY sub.week
@@ -158,7 +159,7 @@ def api_weekly_stats():
             LIMIT 52
         """)
         rows = cur.fetchall()
-        data = [{'week_key': r[0], 'week_start': r[1], 'total_notes': r[2] or 0, 'total_energy': r[3] or 0} for r in rows]
+        data = [{'week_start': r[1], 'week_key': r[0], 'total_notes': r[2] or 0, 'session_seconds': r[3] or 0, 'total_energy': r[4] or 0} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -171,14 +172,15 @@ def api_monthly_stats():
         # Aggregate daily rows into month buckets (YYYY-MM) and return last 24 months
         cur.execute("""
             SELECT strftime('%Y-%m', date) AS month_key, MIN(date) AS month_start,
-                   SUM(total_notes) AS total_notes, SUM(total_energy) AS total_energy
+                   SUM(total_notes) AS total_notes, SUM(session_time_seconds) AS session_seconds,
+                   SUM(total_energy) AS total_energy
             FROM daily_stats
             GROUP BY month_key
             ORDER BY month_key DESC
             LIMIT 24
         """)
         rows = cur.fetchall()
-        data = [{'month_key': r[0], 'month_start': r[1], 'total_notes': r[2] or 0, 'total_energy': r[3] or 0} for r in rows]
+        data = [{'month_start': r[1], 'month_key': r[0], 'total_notes': r[2] or 0, 'session_seconds': r[3] or 0, 'total_energy': r[4] or 0} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -188,9 +190,9 @@ def api_monthly_stats():
 def api_trends_stats():
     try:
         cur = db.conn.cursor()
-        cur.execute("SELECT date, total_notes, total_energy FROM daily_stats ORDER BY date DESC LIMIT 1000")
+        cur.execute("SELECT date, total_notes, session_time_seconds, total_energy FROM daily_stats ORDER BY date DESC LIMIT 1000")
         rows = cur.fetchall()
-        data = [{'date': r[0], 'total_notes': r[1], 'total_energy': r[2]} for r in rows]
+        data = [{'date': r[0], 'total_notes': r[1], 'session_seconds': r[2], 'total_energy': r[3]} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -300,8 +302,8 @@ def api_heatmap_distribution():
 
     Query params:
       - range: 'daily','hourly','weekly','monthly','trends'
-      - date: YYYY-MM-DD (for daily/hourly)
-    Response: { ok: True, notes: [ { midi_note, count } ... ], totals: { total_notes } }
+      - date: YYYY-MM-DD (for daily/hourly/weekly/monthly - used as reference point)
+    Response: { ok: True, notes: [ { midi_note, count, total_velocity, total_energy, total_duration_ms, note_name } ... ], totals: { total_notes, total_energy, avg_velocity } }
     """
     qrange = request.args.get('range') or 'daily'
     date = request.args.get('date') or datetime.now().strftime('%Y-%m-%d')
@@ -310,27 +312,39 @@ def api_heatmap_distribution():
         # For daily/hourly we can use note_distribution table; for aggregated ranges sum across days
         if qrange in ('daily','hourly'):
             # use specific date
-            cur.execute('SELECT midi_note, SUM(count) FROM note_distribution WHERE date=? GROUP BY midi_note ORDER BY midi_note', (date,))
+            cur.execute('''SELECT midi_note, note_name, SUM(count), SUM(total_velocity), SUM(total_energy), SUM(total_duration_ms)
+                          FROM note_distribution WHERE date=? GROUP BY midi_note ORDER BY midi_note''', (date,))
             rows = cur.fetchall()
         else:
             # aggregate across daily_stats range: for monthly/weekly/trends sum note_distribution across matching dates
             if qrange == 'monthly':
-                month_prefix = datetime.now().strftime('%Y-%m')
-                cur.execute("SELECT midi_note, SUM(count) FROM note_distribution WHERE date LIKE ? || '%' GROUP BY midi_note ORDER BY midi_note", (month_prefix,))
+                # Use the selected date to determine which month (YYYY-MM)
+                month_prefix = date[:7]  # Extract YYYY-MM from YYYY-MM-DD
+                cur.execute('''SELECT midi_note, note_name, SUM(count), SUM(total_velocity), SUM(total_energy), SUM(total_duration_ms)
+                              FROM note_distribution WHERE date LIKE ? || '%' GROUP BY midi_note ORDER BY midi_note''', (month_prefix,))
             elif qrange == 'weekly':
-                # approximate week by last 7 days
-                cur.execute("SELECT midi_note, SUM(count) FROM note_distribution WHERE date >= date('now','-6 days') GROUP BY midi_note ORDER BY midi_note")
+                # Aggregate 7 days starting from the selected date
+                cur.execute('''SELECT midi_note, note_name, SUM(count), SUM(total_velocity), SUM(total_energy), SUM(total_duration_ms)
+                              FROM note_distribution WHERE date >= ? AND date < date(?, '+7 days')
+                              GROUP BY midi_note ORDER BY midi_note''', (date, date))
             elif qrange == 'trends':
                 # all-time
-                cur.execute("SELECT midi_note, SUM(count) FROM note_distribution GROUP BY midi_note ORDER BY midi_note")
+                cur.execute('''SELECT midi_note, note_name, SUM(count), SUM(total_velocity), SUM(total_energy), SUM(total_duration_ms)
+                              FROM note_distribution GROUP BY midi_note ORDER BY midi_note''')
             else:
-                # default: last 30 days
-                cur.execute("SELECT midi_note, SUM(count) FROM note_distribution WHERE date >= date('now','-29 days') GROUP BY midi_note ORDER BY midi_note")
+                # default: last 30 days from selected date
+                cur.execute('''SELECT midi_note, note_name, SUM(count), SUM(total_velocity), SUM(total_energy), SUM(total_duration_ms)
+                              FROM note_distribution WHERE date >= date(?, '-29 days') AND date <= ?
+                              GROUP BY midi_note ORDER BY midi_note''', (date, date))
             rows = cur.fetchall()
 
-        notes = [{'midi_note': r[0], 'count': r[1] or 0} for r in rows]
+        notes = [{'midi_note': r[0], 'note_name': r[1], 'count': r[2] or 0, 'total_velocity': r[3] or 0,
+                  'total_energy': r[4] or 0, 'total_duration_ms': r[5] or 0} for r in rows]
         total_notes = sum(n['count'] for n in notes)
-        return jsonify({'ok': True, 'notes': notes, 'totals': {'total_notes': total_notes}})
+        total_energy = sum(n['total_energy'] for n in notes)
+        total_velocity = sum(n['total_velocity'] for n in notes)
+        avg_velocity = (total_velocity / total_notes) if total_notes > 0 else 0
+        return jsonify({'ok': True, 'notes': notes, 'totals': {'total_notes': total_notes, 'total_energy': total_energy, 'avg_velocity': avg_velocity}})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 

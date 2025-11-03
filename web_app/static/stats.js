@@ -30,11 +30,19 @@ async function fetchNoteDistribution(date){
 }
 
 let statsChart = null;
+let noteDistChart = null;
 
 // buildChart: renders a time-based Chart.js bar chart. `range` influences time unit (hour/day/week/month).
 function buildChart(canvas, labels, values, label, range = 'daily'){
-  if(!canvas) return;
-  if(statsChart){ try{ statsChart.destroy(); }catch(_){ } statsChart = null; }
+  if(!canvas){ console.error('buildChart: canvas is null'); return; }
+
+  // Determine which chart to manage based on canvas ID
+  const isMainChart = canvas.id === 'stats_chart';
+  const chartRef = isMainChart ? statsChart : noteDistChart;
+
+  // Destroy the appropriate existing chart
+  if(chartRef){ try{ chartRef.destroy(); }catch(e){ console.error('Chart destroy error:', e); } }
+
   const ctx = canvas.getContext('2d');
   const points = labels.map((l,i)=>({ x: l, y: values[i] }));
   let timeUnit = 'day';
@@ -42,8 +50,10 @@ function buildChart(canvas, labels, values, label, range = 'daily'){
   else if(range === 'monthly') timeUnit = 'month';
   else if(range === 'weekly') timeUnit = 'week';
 
+  console.log(`buildChart: range=${range}, timeUnit=${timeUnit}, points=${points.length}, label=${label}`);
+
   try{
-    statsChart = new Chart(ctx, {
+    const newChart = new Chart(ctx, {
       type: 'bar',
       data: { datasets: [{ label: label || '', data: points, backgroundColor: '#2b8cbe' }] },
       options: {
@@ -56,6 +66,15 @@ function buildChart(canvas, labels, values, label, range = 'daily'){
         plugins: { legend: { display: false } }
       }
     });
+
+    // Assign to the appropriate global variable
+    if(isMainChart){
+      statsChart = newChart;
+    } else {
+      noteDistChart = newChart;
+    }
+
+    console.log('Chart created successfully');
   }catch(chartErr){
     console.error('chart render error', chartErr);
     // fallback: clear canvas and display text message
@@ -73,21 +92,113 @@ function renderSimpleTable(container, data){
   const el = document.getElementById(container);
   el.innerHTML = '';
   if(!data.length){ el.textContent = 'No data'; return; }
+
+  // Define standard column order: date fields first, then key fields, then metrics
+  const columnOrder = ['date', 'week_start', 'month_start', 'hour', 'week_key', 'month_key', 'total_notes', 'session_seconds', 'total_energy', 'avg_velocity'];
+
+  // Get columns that exist in the data, in the preferred order
+  const allKeys = Object.keys(data[0]);
+  const orderedKeys = columnOrder.filter(k => allKeys.includes(k));
+  // Add any remaining keys that weren't in our order list
+  const remainingKeys = allKeys.filter(k => !orderedKeys.includes(k));
+  const finalKeys = orderedKeys.concat(remainingKeys);
+
+  // Pagination setup
+  let pageSize = 25;
+  let currentPage = 0;
+  let totalPages = Math.ceil(data.length / pageSize);
+
+  const tableWrapper = document.createElement('div');
+  tableWrapper.className = 'table_wrapper';
+
   const table = document.createElement('table');
   table.className = 'compact_table';
   const thead = document.createElement('thead');
   const headerRow = document.createElement('tr');
-  Object.keys(data[0]).forEach(k=>{ const th = document.createElement('th'); th.textContent = k; headerRow.appendChild(th);});
+  finalKeys.forEach(k=>{ const th = document.createElement('th'); th.textContent = k; headerRow.appendChild(th);});
   thead.appendChild(headerRow);
   table.appendChild(thead);
   const tbody = document.createElement('tbody');
-  data.forEach(row=>{
-    const tr = document.createElement('tr');
-    Object.keys(row).forEach(k=>{ const td = document.createElement('td'); td.textContent = row[k]; tr.appendChild(td)});
-    tbody.appendChild(tr);
-  });
   table.appendChild(tbody);
-  el.appendChild(table);
+
+  function renderPage(page){
+    tbody.innerHTML = '';
+    const start = page * pageSize;
+    const end = Math.min(data.length, start + pageSize);
+    for(let i = start; i < end; i++){
+      const row = data[i];
+      const tr = document.createElement('tr');
+      finalKeys.forEach(k=>{ const td = document.createElement('td'); td.textContent = row[k]; tr.appendChild(td)});
+      tbody.appendChild(tr);
+    }
+  }
+
+  // Create pagination controls
+  const pager = document.createElement('div');
+  pager.className = 'pager';
+
+  // Page size selector
+  const pageSizeLabel = document.createElement('label');
+  pageSizeLabel.textContent = 'Items per page: ';
+  pageSizeLabel.style.marginRight = '8px';
+
+  const pageSizeSelect = document.createElement('select');
+  [10, 25, 50].forEach(size => {
+    const option = document.createElement('option');
+    option.value = size;
+    option.textContent = size;
+    if(size === pageSize) option.selected = true;
+    pageSizeSelect.appendChild(option);
+  });
+
+  pageSizeSelect.addEventListener('change', ()=>{
+    pageSize = Number(pageSizeSelect.value);
+    totalPages = Math.ceil(data.length / pageSize);
+    currentPage = 0; // Reset to first page
+    renderPage(currentPage);
+    pageLabel.textContent = `Page ${currentPage + 1} / ${totalPages}`;
+    prevBtn.disabled = currentPage === 0;
+    nextBtn.disabled = currentPage >= totalPages - 1;
+  });
+
+  const prevBtn = document.createElement('button'); prevBtn.textContent = 'Prev';
+  const nextBtn = document.createElement('button'); nextBtn.textContent = 'Next';
+  const pageLabel = document.createElement('span'); pageLabel.textContent = `Page ${currentPage + 1} / ${totalPages}`;
+  pageLabel.style.margin = '0 8px';
+
+  prevBtn.disabled = currentPage === 0;
+  nextBtn.disabled = currentPage >= totalPages - 1;
+
+  prevBtn.addEventListener('click', ()=>{
+    if(currentPage > 0){
+      currentPage--;
+      renderPage(currentPage);
+      pageLabel.textContent = `Page ${currentPage + 1} / ${totalPages}`;
+      prevBtn.disabled = currentPage === 0;
+      nextBtn.disabled = false;
+    }
+  });
+
+  nextBtn.addEventListener('click', ()=>{
+    if(currentPage < totalPages - 1){
+      currentPage++;
+      renderPage(currentPage);
+      pageLabel.textContent = `Page ${currentPage + 1} / ${totalPages}`;
+      nextBtn.disabled = currentPage >= totalPages - 1;
+      prevBtn.disabled = false;
+    }
+  });
+
+  pager.appendChild(pageSizeLabel);
+  pager.appendChild(pageSizeSelect);
+  pager.appendChild(prevBtn);
+  pager.appendChild(pageLabel);
+  pager.appendChild(nextBtn);
+  tableWrapper.appendChild(pager);
+
+  tableWrapper.appendChild(table);
+  el.appendChild(tableWrapper);
+  renderPage(currentPage);
 }
 
 function renderNoteDistributionTable(targetId, notes){
@@ -180,7 +291,9 @@ async function updateStats(){
   try{
     const range = document.getElementById('range_select').value;
     const yKey = document.getElementById('y_select').value;
+    console.log(`updateStats called: range=${range}, yKey=${yKey}`);
     const data = await fetchStats(range);
+    console.log(`fetchStats returned ${data.length} rows`);
 
   // We'll build a time-series x axis depending on the range
   let labels = [];
@@ -211,9 +324,9 @@ async function updateStats(){
   } else if(range === 'monthly'){
     // Prefer server-side monthly aggregation if present
     if(data.length && (data[0].month_key || data[0].month_start)){
-      // server returned month_key/month_start and totals
-  data.reverse();
-  data.forEach(d=>{ labels.push((d.month_key || d.month_start) + '-01 00:00'); values.push(round2(Number(d.total_notes||0))); });
+      // server returned month_key/month_start and totals (newest first, so reverse to oldest first)
+      const reversed = data.slice().reverse();
+      reversed.forEach(d=>{ labels.push((d.month_key || d.month_start) + '-01 00:00'); values.push(round2(Number(d[yKey]||0))); });
     } else {
       // fallback: aggregate daily rows client-side by month
       const monthMap = {};
@@ -230,15 +343,16 @@ async function updateStats(){
       }
     }
   } else if(range === 'weekly'){
-    // server returns week_start and totals
-  data.reverse(); // oldest first
-  data.forEach(d=>{ labels.push((d.week_start || d.week_key) + ' 00:00'); values.push(round2(Number(d.total_notes||0))); });
+    // server returns week_start and totals (newest first, so reverse to oldest first)
+    const reversed = data.slice().reverse();
+    reversed.forEach(d=>{ labels.push((d.week_start || d.week_key) + ' 00:00'); values.push(round2(Number(d[yKey]||0))); });
   } else { // trends
-  data.reverse();
-  data.forEach(d=>{ labels.push((d.date||'') + ' 00:00'); values.push(round2(Number(d[yKey]||0))); });
+    const reversed = data.slice().reverse();
+    reversed.forEach(d=>{ labels.push((d.date||'') + ' 00:00'); values.push(round2(Number(d[yKey]||0))); });
   }
 
   const canvas = document.getElementById('stats_chart');
+  console.log(`Sample labels: ${labels.slice(0, 3).join(', ')}`);
   buildChart(canvas, labels, values, yKey, range);
   // prepare a simplified table where numbers are rounded
   const normalized = data.map(d=>{
@@ -260,20 +374,23 @@ function round2(v){
 
 async function updateNoteDistribution(){
   try{
+    const range = document.getElementById('range_select').value;
     const el = document.getElementById('dist_date');
     let date = el.value;
     if(!date){ date = new Date().toISOString().slice(0,10); el.value = date; }
-    const resp = await fetchNoteDistribution(date);
-    if(!resp){ document.getElementById('note_distribution_table').textContent = 'No data'; return; }
-  // update big totals
+
+    // Use the heatmap API which already supports range-based queries
+    const url = `/api/heatmap_distribution?range=${encodeURIComponent(range)}&date=${encodeURIComponent(date)}`;
+    const r = await fetch(url);
+    const resp = await r.json();
+
+    if(!resp || !resp.ok){ document.getElementById('note_distribution_table').textContent = 'No data'; return; }
+  // update big totals (for the selected time range - these are the cards in the Note Distribution section)
   const totals = resp.totals || {};
   document.getElementById('total_notes').textContent = formatBigNumber(totals.total_notes || 0);
   document.getElementById('total_energy').textContent = (totals.total_energy || 0).toFixed(2);
   document.getElementById('avg_velocity').textContent = (totals.avg_velocity || 0).toFixed(1);
-  // populate small top totals too
-  if(document.getElementById('total_notes_top')) document.getElementById('total_notes_top').textContent = formatBigNumber(totals.total_notes || 0);
-  if(document.getElementById('total_energy_top')) document.getElementById('total_energy_top').textContent = (totals.total_energy || 0).toFixed(2);
-  if(document.getElementById('avg_velocity_top')) document.getElementById('avg_velocity_top').textContent = (totals.avg_velocity || 0).toFixed(1);
+  // NOTE: Do NOT update the small top totals (_top) - those should always show all-time totals
 
   // render a small chart (notes x axis)
   const notes = resp.notes || [];
@@ -330,25 +447,76 @@ function formatHMS(seconds){
   return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
 }
 
+function updateNoteDistributionLabels(){
+  const range = document.getElementById('range_select').value;
+  const titleEl = document.querySelector('#stats h3:nth-of-type(3)');
+  const dateLabel = document.querySelector('label[for="dist_date"]');
+
+  // Update section title
+  if(titleEl){
+    let rangeText = 'Per-Day';
+    if(range === 'weekly') rangeText = 'Per-Week';
+    else if(range === 'monthly') rangeText = 'Per-Month';
+    else if(range === 'hourly') rangeText = 'Per-Day';
+    else if(range === 'trends') rangeText = 'All-Time';
+    titleEl.textContent = `Note Distribution (${rangeText})`;
+  }
+
+  // Update date picker label
+  if(dateLabel){
+    let labelText = 'Date:';
+    if(range === 'weekly') labelText = 'Week Starting:';
+    else if(range === 'monthly') labelText = 'Month:';
+    dateLabel.textContent = labelText;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', ()=>{
-  document.getElementById('range_select').addEventListener('change', ()=>{ updateStats(); updateHeatmap(); });
+  // Set default values BEFORE setting up event listeners and initial data load
   document.getElementById('y_select').value = 'total_notes'; // default to total_notes
-  document.getElementById('y_select').addEventListener('change', updateStats);
-  document.getElementById('dist_date').addEventListener('change', updateNoteDistribution);
-  document.getElementById('heatmap_refresh').addEventListener('click', updateHeatmap);
-  // load totals and data, protective try/catch to avoid leaving Loading...
+
+  // Set up event listeners
+  document.getElementById('range_select').addEventListener('change', async ()=>{
+    updateNoteDistributionLabels();
+    // Add a small delay to ensure DOM is ready
+    await new Promise(resolve => setTimeout(resolve, 50));
+    // Call updateStats first and wait for it to complete before calling others
+    await updateStats().catch(e=>console.error(e));
+    // Then call the other updates in parallel
+    await Promise.all([
+      updateHeatmap().catch(e=>console.error(e)),
+      updateNoteDistribution().catch(e=>console.error(e))
+    ]);
+  });
+  document.getElementById('y_select').addEventListener('change', ()=>{ updateStats().catch(e=>console.error(e)); });
+  document.getElementById('dist_date').addEventListener('change', ()=>{ updateNoteDistribution().catch(e=>console.error(e)); });
+  document.getElementById('heatmap_refresh').addEventListener('click', ()=>{ updateHeatmap().catch(e=>console.error(e)); });
+
+  // Load initial data, protective try/catch to avoid leaving Loading...
   fetchAllTotals().catch(e=>console.error(e));
   updateStats().catch(e=>console.error(e));
   updateNoteDistribution().catch(e=>console.error(e));
   updateHeatmap().catch(e=>console.error(e));
+  updateNoteDistributionLabels();
 
   // Prev/Next date navigation for note distribution
   const prevBtn = document.getElementById('dist_prev');
   const nextBtn = document.getElementById('dist_next');
   const dateInput = document.getElementById('dist_date');
-  function shiftDate(days){
+  function shiftDate(direction){
+    const range = document.getElementById('range_select').value;
     let d = dateInput.value ? new Date(dateInput.value) : new Date();
-    d.setDate(d.getDate() + days);
+
+    // Shift by appropriate interval based on time range
+    if(range === 'weekly'){
+      d.setDate(d.getDate() + (direction * 7));
+    } else if(range === 'monthly'){
+      d.setMonth(d.getMonth() + direction);
+    } else {
+      // hourly, daily, trends - shift by 1 day
+      d.setDate(d.getDate() + direction);
+    }
+
     const s = d.toISOString().slice(0,10);
     dateInput.value = s;
     // refresh both the table and heatmap immediately
