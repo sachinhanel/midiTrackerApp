@@ -780,14 +780,14 @@ class MidiTrackerGUI:
                     # LED visualization
                     self.led_controller.note_off(note)
                         # immediate push to web UI
-                        try:
-                            self.post_event({
-                                'type': 'note_off', 'note': note,
-                                'active_notes': list(self.active_notes.keys()),
-                                'debug_messages': list(self.debug_messages)[-20:]
-                            })
-                        except Exception:
-                            pass
+                    try:
+                        self.post_event({
+                            'type': 'note_off', 'note': note,
+                            'active_notes': list(self.active_notes.keys()),
+                            'debug_messages': list(self.debug_messages)[-20:]
+                        })
+                    except Exception:
+                        pass
                     else:
                         self.add_debug_message(f"🎵 NOTE OFF: {note_name}")
                     # Notify web UI of note off and current state
