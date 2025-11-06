@@ -17,6 +17,7 @@ from statistics_window import StatisticsWindow
 from heatmap_window import HeatmapWindow
 
 from chord_window_m21 import Music21ChordWindow
+from led_controller import get_led_controller
 
 try:
     import rtmidi
@@ -54,6 +55,9 @@ class MidiTrackerGUI:
         # Initialize window handlers
         self.statistics_window = StatisticsWindow(self)
         self.heatmap_window = HeatmapWindow(self)
+
+        # Initialize LED controller
+        self.led_controller = get_led_controller()
 
         # Session timing (practice time tracking)
         self.session_timer_start = None
@@ -694,6 +698,10 @@ class MidiTrackerGUI:
 
                     energy_str = self.energy_calculator.format_energy(note_energy)
                     self.add_debug_message(f"🎵 NOTE ON: {note_name} (#{note}) vel={velocity}") #energy={energy_str} removed cos annoying
+
+                    # LED visualization
+                    self.led_controller.note_on(note, velocity)
+
                     # immediate push to web UI so debug appears live
                     try:
                         self.post_event({
@@ -768,6 +776,9 @@ class MidiTrackerGUI:
 
                         del self.active_notes[note]
                         self.add_debug_message(f"🎵 NOTE OFF: {note_name} duration={duration_ms:.1f}ms")
+
+                    # LED visualization
+                    self.led_controller.note_off(note)
                         # immediate push to web UI
                         try:
                             self.post_event({

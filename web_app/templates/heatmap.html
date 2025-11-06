@@ -1,9 +1,25 @@
 {% extends "layout.html" %}
 {% block content %}
-<section id="heatmap">
-  <h2>Heatmap</h2>
+<section id="led_control">
+  <h2>LED Strip Control</h2>
   <div class="panel">
-    <img id="heatmap_img" src="/api/heatmap.png" alt="Heatmap"> 
+    <h3>LED Visualization</h3>
+    <p>Control the WS2812B LED strip connected to GPIO 18</p>
+    <p id="led_status">Status: <span id="led_status_text">Unknown</span></p>
+    <div style="margin-top: 12px;">
+      <button id="led_enable_btn" style="padding: 10px 20px; margin-right: 10px;">Enable LED Visualization</button>
+      <button id="led_disable_btn" style="padding: 10px 20px; margin-right: 10px;">Disable LED Visualization</button>
+      <button id="led_test_btn" style="padding: 10px 20px;">Run Test Pattern</button>
+    </div>
+    <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
+      <h4>Configuration</h4>
+      <p><strong>Total LEDs:</strong> 144</p>
+      <p><strong>Piano Keys:</strong> 88 (using LEDs 56-143)</p>
+      <p><strong>Status LEDs:</strong> 5 (LEDs 0-4, green when active)</p>
+      <p><strong>Mapping:</strong> LED 143 = MIDI 21 (A0, lowest key) → LED 56 = MIDI 108 (C8, highest key)</p>
+      <p><strong>GPIO Pin:</strong> 18 (PWM0)</p>
+    </div>
   </div>
+  <script src="/static/led_control.js"></script>
 </section>
 {% endblock %}

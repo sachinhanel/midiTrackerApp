@@ -22,6 +22,7 @@ if project_root not in sys.path:
 from database_manager import DatabaseManager
 from energy_calculator import PianoEnergyCalculator
 from chord_window_m21 import chord_symbol_from_midi
+from led_controller import get_led_controller
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 # Prefer eventlet if available for efficient websocket handling; fall back to threading for dev
@@ -444,6 +445,60 @@ def api_state():
     """Return current in-memory live state snapshot (useful for polling fallback)."""
     try:
         return jsonify({'ok': True, 'state': current_state})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+# LED Strip Control API Endpoints
+@app.route('/api/led/status')
+def api_led_status():
+    """Get LED controller status"""
+    try:
+        led = get_led_controller()
+        return jsonify({
+            'ok': True,
+            'enabled': led.enabled,
+            'hardware_available': led.strip is not None
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/led/enable', methods=['POST'])
+def api_led_enable():
+    """Enable LED visualization"""
+    try:
+        led = get_led_controller()
+        success = led.enable()
+        if success:
+            return jsonify({'ok': True, 'message': 'LED visualization enabled'})
+        else:
+            return jsonify({'ok': False, 'error': 'Hardware not available'}), 400
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/led/disable', methods=['POST'])
+def api_led_disable():
+    """Disable LED visualization"""
+    try:
+        led = get_led_controller()
+        led.disable()
+        return jsonify({'ok': True, 'message': 'LED visualization disabled'})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/led/test', methods=['POST'])
+def api_led_test():
+    """Run LED test pattern"""
+    try:
+        led = get_led_controller()
+        if not led.strip:
+            return jsonify({'ok': False, 'error': 'Hardware not available'}), 400
+
+        led.test_pattern()
+        return jsonify({'ok': True, 'message': 'Test pattern completed'})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
 
