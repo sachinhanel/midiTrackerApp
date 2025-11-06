@@ -1,5 +1,6 @@
 import sqlite3
 import queue
+import time
 from datetime import datetime
 
 class DatabaseManager:
@@ -10,11 +11,29 @@ class DatabaseManager:
         self.session_id = None
         self.session_start = datetime.now()
         self.setup_database()
+
+    def _retry_on_locked(self, func, max_retries=5, delay=0.1):
+        """Retry a database operation if it's locked"""
+        for attempt in range(max_retries):
+            try:
+                return func()
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < max_retries - 1:
+                    time.sleep(delay * (attempt + 1))  # Exponential backoff
+                    continue
+                raise
+        return None
     
     def setup_database(self):
         """Initialize SQLite database with aggregated data structure"""
         try:
-            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30.0)
+            # Enable WAL mode for better concurrent access
+            self.conn.execute('PRAGMA journal_mode=WAL')
+            # Set busy timeout to 30 seconds
+            self.conn.execute('PRAGMA busy_timeout=30000')
+            # Optimize for concurrent writes
+            self.conn.execute('PRAGMA synchronous=NORMAL')
             cursor = self.conn.cursor()
             
             # Daily statistics table
@@ -196,15 +215,15 @@ class DatabaseManager:
         """Update note distribution for heatmap"""
         if not self.conn:
             return
-            
-        try:
+
+        def _do_update():
             cursor = self.conn.cursor()
             date, midi_note, note_name, count, velocity, energy, bytes_count, duration = data
-            
+
             cursor.execute('''
                 INSERT OR REPLACE INTO note_distribution
                 (date, midi_note, note_name, count, total_velocity, total_energy, note_bytes, total_duration_ms, updated_at)
-                VALUES (?, ?, ?, 
+                VALUES (?, ?, ?,
                         COALESCE((SELECT count FROM note_distribution WHERE date=? AND midi_note=?), 0) + ?,
                         COALESCE((SELECT total_velocity FROM note_distribution WHERE date=? AND midi_note=?), 0) + ?,
                         COALESCE((SELECT total_energy FROM note_distribution WHERE date=? AND midi_note=?), 0) + ?,
@@ -213,9 +232,11 @@ class DatabaseManager:
                         datetime('now', 'localtime'))
             ''', (date, midi_note, note_name, date, midi_note, count, date, midi_note, velocity,
                 date, midi_note, energy, date, midi_note, bytes_count, date, midi_note, duration))
-            
+
             self.conn.commit()
-            
+
+        try:
+            self._retry_on_locked(_do_update)
         except Exception as e:
             print(f"Error updating note distribution: {e}")
     

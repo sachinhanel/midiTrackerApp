@@ -516,44 +516,54 @@ class MidiTrackerGUI:
             
             # Only save if there's new data
             if delta_daily_stats['total_notes'] > 0 or delta_daily_stats['session_time_seconds'] > 0:
-                cursor = self.conn.cursor()
-                
-                cursor.execute('''
-                    INSERT OR IGNORE INTO daily_stats (date) VALUES (?)
-                ''', (date_str,))
-                
-                cursor.execute('''
-                    UPDATE daily_stats SET
-                        total_notes = COALESCE(total_notes, 0) + ?,
-                        total_duration_ms = COALESCE(total_duration_ms, 0) + ?,
-                        total_velocity = COALESCE(total_velocity, 0) + ?,
-                        total_energy = COALESCE(total_energy, 0) + ?,
-                        pedal_presses = COALESCE(pedal_presses, 0) + ?,
-                        note_bytes = COALESCE(note_bytes, 0) + ?,
-                        other_bytes = COALESCE(other_bytes, 0) + ?,
-                        total_bytes = COALESCE(total_bytes, 0) + ?,
-                        session_time_seconds = COALESCE(session_time_seconds, 0) + ?,
-                        avg_velocity = CASE 
-                            WHEN COALESCE(total_notes, 0) > 0 
-                            THEN CAST(COALESCE(total_velocity, 0) AS REAL) / COALESCE(total_notes, 0)
-                            ELSE 0 
-                        END,
-                        updated_at = datetime('now', 'localtime')
-                    WHERE date = ?
-                ''', (
-                    delta_daily_stats['total_notes'],
-                    delta_daily_stats['total_duration_ms'], 
-                    delta_daily_stats['total_velocity'],
-                    delta_daily_stats['total_energy'],
-                    delta_daily_stats['pedal_presses'],
-                    delta_daily_stats['note_bytes'],
-                    delta_daily_stats['other_bytes'],
-                    delta_daily_stats['note_bytes'] + delta_daily_stats['other_bytes'],
-                    delta_daily_stats['session_time_seconds'],
-                    date_str
-                ))
-                
-                self.conn.commit()
+                # Use retry logic for database operations
+                max_retries = 5
+                for attempt in range(max_retries):
+                    try:
+                        cursor = self.conn.cursor()
+
+                        cursor.execute('''
+                            INSERT OR IGNORE INTO daily_stats (date) VALUES (?)
+                        ''', (date_str,))
+
+                        cursor.execute('''
+                            UPDATE daily_stats SET
+                                total_notes = COALESCE(total_notes, 0) + ?,
+                                total_duration_ms = COALESCE(total_duration_ms, 0) + ?,
+                                total_velocity = COALESCE(total_velocity, 0) + ?,
+                                total_energy = COALESCE(total_energy, 0) + ?,
+                                pedal_presses = COALESCE(pedal_presses, 0) + ?,
+                                note_bytes = COALESCE(note_bytes, 0) + ?,
+                                other_bytes = COALESCE(other_bytes, 0) + ?,
+                                total_bytes = COALESCE(total_bytes, 0) + ?,
+                                session_time_seconds = COALESCE(session_time_seconds, 0) + ?,
+                                avg_velocity = CASE
+                                    WHEN COALESCE(total_notes, 0) > 0
+                                    THEN CAST(COALESCE(total_velocity, 0) AS REAL) / COALESCE(total_notes, 0)
+                                    ELSE 0
+                                END,
+                                updated_at = datetime('now', 'localtime')
+                            WHERE date = ?
+                        ''', (
+                            delta_daily_stats['total_notes'],
+                            delta_daily_stats['total_duration_ms'],
+                            delta_daily_stats['total_velocity'],
+                            delta_daily_stats['total_energy'],
+                            delta_daily_stats['pedal_presses'],
+                            delta_daily_stats['note_bytes'],
+                            delta_daily_stats['other_bytes'],
+                            delta_daily_stats['note_bytes'] + delta_daily_stats['other_bytes'],
+                            delta_daily_stats['session_time_seconds'],
+                            date_str
+                        ))
+
+                        self.conn.commit()
+                        break  # Success, exit retry loop
+                    except sqlite3.OperationalError as e:
+                        if "database is locked" in str(e) and attempt < max_retries - 1:
+                            time.sleep(0.1 * (attempt + 1))  # Exponential backoff
+                            continue
+                        raise
                 
                 # Update what we've saved so far
                 self.last_saved_daily_stats = self.daily_stats.copy()
