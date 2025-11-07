@@ -12,11 +12,19 @@ import time
 import threading
 
 try:
-    from rpi_ws281x import PixelStrip, Color
+    # Try Pi 5-compatible library first
+    from rpi_ws281x_lgpio import PixelStrip, Color
     WS281X_AVAILABLE = True
+    print("Using rpi-ws281x-lgpio (Pi 5 compatible)")
 except ImportError:
-    print("Warning: rpi_ws281x not available. Install with: sudo pip3 install rpi_ws281x")
-    WS281X_AVAILABLE = False
+    try:
+        # Fall back to original library for older Pi models
+        from rpi_ws281x import PixelStrip, Color
+        WS281X_AVAILABLE = True
+        print("Using rpi_ws281x (legacy)")
+    except ImportError:
+        print("Warning: LED library not available. Install with: sudo pip3 install rpi-lgpio")
+        WS281X_AVAILABLE = False
 
 
 class LEDController:
@@ -56,6 +64,9 @@ class LEDController:
             except Exception as e:
                 print(f"Error initializing LED strip: {e}")
                 print("Make sure to run with sudo for GPIO access")
+                print("For Raspberry Pi 5, you may need to use 'rpi-lgpio' library instead:")
+                print("  sudo pip uninstall rpi-ws281x")
+                print("  sudo pip install rpi-lgpio")
                 self.strip = None
         else:
             print("LED Controller: rpi_ws281x not available (simulation mode)")
