@@ -11,15 +11,29 @@ Simple LED Strip Controller for MIDI Piano Visualization
 import time
 import threading
 
+WS281X_AVAILABLE = False
+PixelStrip = None
+Color = None
+
+# Try Adafruit NeoPixel first (Pi 5 compatible)
 try:
-    from rpi_ws281x import PixelStrip, Color
+    import board
+    import neopixel
     WS281X_AVAILABLE = True
-    print("LED library loaded successfully")
-except ImportError as e:
-    print(f"Warning: LED library not available: {e}")
-    print("For Raspberry Pi 5, install with: sudo pip install rpi-ws281x")
-    print("Make sure you're using rpi-ws281x >= 5.0.0 which supports Pi 5")
-    WS281X_AVAILABLE = False
+    USING_NEOPIXEL = True
+    print("LED library loaded successfully (using Adafruit NeoPixel for Pi 5)")
+except ImportError:
+    # Fall back to rpi_ws281x for older Pi models
+    try:
+        from rpi_ws281x import PixelStrip, Color
+        WS281X_AVAILABLE = True
+        USING_NEOPIXEL = False
+        print("LED library loaded successfully (using rpi_ws281x)")
+    except ImportError as e:
+        print(f"Warning: LED library not available: {e}")
+        print("For Raspberry Pi 5, install with: pip install adafruit-circuitpython-neopixel")
+        print("For older Pi models, install with: sudo pip install rpi-ws281x")
+        USING_NEOPIXEL = False
 
 
 class LEDController:
@@ -41,30 +55,45 @@ class LEDController:
         self.strip = None
         self.active_notes = set()
         self.lock = threading.Lock()
+        self.using_neopixel = USING_NEOPIXEL
 
         if WS281X_AVAILABLE:
             try:
-                self.strip = PixelStrip(
-                    self.LED_COUNT,
-                    self.LED_PIN,
-                    self.LED_FREQ_HZ,
-                    self.LED_DMA,
-                    self.LED_INVERT,
-                    self.LED_BRIGHTNESS,
-                    self.LED_CHANNEL
-                )
-                self.strip.begin()
-                print(f"LED Controller initialized: {self.LED_COUNT} LEDs on GPIO {self.LED_PIN}")
+                if USING_NEOPIXEL:
+                    # Adafruit NeoPixel for Pi 5
+                    import board
+                    import neopixel
+                    # GPIO 18 = board.D18
+                    self.strip = neopixel.NeoPixel(
+                        board.D18,
+                        self.LED_COUNT,
+                        brightness=self.LED_BRIGHTNESS / 255.0,
+                        auto_write=False,
+                        pixel_order=neopixel.GRB
+                    )
+                    print(f"LED Controller initialized (NeoPixel): {self.LED_COUNT} LEDs on GPIO 18")
+                else:
+                    # rpi_ws281x for older Pi models
+                    self.strip = PixelStrip(
+                        self.LED_COUNT,
+                        self.LED_PIN,
+                        self.LED_FREQ_HZ,
+                        self.LED_DMA,
+                        self.LED_INVERT,
+                        self.LED_BRIGHTNESS,
+                        self.LED_CHANNEL
+                    )
+                    self.strip.begin()
+                    print(f"LED Controller initialized (rpi_ws281x): {self.LED_COUNT} LEDs on GPIO {self.LED_PIN}")
                 self.clear_all()
             except Exception as e:
                 print(f"Error initializing LED strip: {e}")
                 print("Make sure to run with sudo for GPIO access")
-                print("For Raspberry Pi 5, you may need to use 'rpi-lgpio' library instead:")
-                print("  sudo pip uninstall rpi-ws281x")
-                print("  sudo pip install rpi-lgpio")
+                if not USING_NEOPIXEL:
+                    print("For Raspberry Pi 5, try: pip install adafruit-circuitpython-neopixel")
                 self.strip = None
         else:
-            print("LED Controller: rpi_ws281x not available (simulation mode)")
+            print("LED Controller: LED library not available (simulation mode)")
 
     def midi_note_to_led(self, midi_note):
         """
@@ -79,6 +108,23 @@ class LEDController:
         led_index = self.LED_COUNT - 1 - offset
         return led_index
 
+    def _set_pixel(self, index, r, g, b):
+        """Set a pixel color (handles both APIs)"""
+        if self.using_neopixel:
+            # NeoPixel API: strip[index] = (r, g, b)
+            self.strip[index] = (r, g, b)
+        else:
+            # rpi_ws281x API: setPixelColor(index, Color(g, r, b))
+            # Note: Color() takes GRB not RGB
+            self.strip.setPixelColor(index, Color(g, r, b))
+
+    def _show(self):
+        """Update the strip (handles both APIs)"""
+        if self.using_neopixel:
+            self.strip.show()
+        else:
+            self.strip.show()
+
     def note_on(self, midi_note, velocity):
         """Light up LED when note is pressed"""
         if not self.enabled or not self.strip:
@@ -90,9 +136,9 @@ class LEDController:
 
         with self.lock:
             self.active_notes.add(midi_note)
-            # Blue color
-            self.strip.setPixelColor(led_index, Color(0, 0, 255))
-            self.strip.show()
+            # Blue color (R=0, G=0, B=255)
+            self._set_pixel(led_index, 0, 0, 255)
+            self._show()
 
     def note_off(self, midi_note):
         """Turn off LED when note is released"""
@@ -107,18 +153,18 @@ class LEDController:
             if midi_note in self.active_notes:
                 self.active_notes.discard(midi_note)
             # Turn off (black)
-            self.strip.setPixelColor(led_index, Color(0, 0, 0))
-            self.strip.show()
+            self._set_pixel(led_index, 0, 0, 0)
+            self._show()
 
     def update_status_leds(self):
         """Keep LEDs 0-4 lit to show program is running"""
         if not self.strip:
             return
 
-        # Green indicator LEDs
+        # Green indicator LEDs (R=0, G=50, B=0)
         for i in range(5):
-            self.strip.setPixelColor(i, Color(0, 50, 0))
-        self.strip.show()
+            self._set_pixel(i, 0, 50, 0)
+        self._show()
 
     def enable(self):
         """Enable LED visualization"""
@@ -146,8 +192,8 @@ class LEDController:
         with self.lock:
             self.active_notes.clear()
             for i in range(self.LED_COUNT):
-                self.strip.setPixelColor(i, Color(0, 0, 0))
-            self.strip.show()
+                self._set_pixel(i, 0, 0, 0)
+            self._show()
 
     def test_pattern(self):
         """Display a test pattern"""
@@ -157,17 +203,17 @@ class LEDController:
 
         print("Running LED test pattern...")
 
-        # Light up status LEDs
+        # Light up status LEDs (green)
         for i in range(5):
-            self.strip.setPixelColor(i, Color(0, 50, 0))
-        self.strip.show()
+            self._set_pixel(i, 0, 50, 0)
+        self._show()
         time.sleep(0.5)
 
-        # Light up piano range bottom to top
+        # Light up piano range bottom to top (blue)
         for midi_note in range(self.PIANO_LOWEST_NOTE, self.PIANO_HIGHEST_NOTE + 1):
             led_index = self.midi_note_to_led(midi_note)
-            self.strip.setPixelColor(led_index, Color(0, 0, 255))
-            self.strip.show()
+            self._set_pixel(led_index, 0, 0, 255)
+            self._show()
             time.sleep(0.005)
 
         time.sleep(0.5)
@@ -175,8 +221,8 @@ class LEDController:
         # Clear piano range
         for midi_note in range(self.PIANO_LOWEST_NOTE, self.PIANO_HIGHEST_NOTE + 1):
             led_index = self.midi_note_to_led(midi_note)
-            self.strip.setPixelColor(led_index, Color(0, 0, 0))
-            self.strip.show()
+            self._set_pixel(led_index, 0, 0, 0)
+            self._show()
             time.sleep(0.005)
 
         print("Test pattern complete")
