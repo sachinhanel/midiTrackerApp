@@ -10,9 +10,9 @@ Type=simple
 User=swag
 WorkingDirectory=/home/swag/Documents/git/midiTrackerApp
 
-# Use your shared venv
-Environment="VIRTUAL_ENV=/home/swag/Documents/git/.venv"
-Environment="PATH=/home/swag/Documents/git/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+# Use project venv
+Environment="VIRTUAL_ENV=/home/swag/Documents/git/midiTrackerApp/.venv"
+Environment="PATH=/home/swag/Documents/git/midiTrackerApp/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 Environment=PYTHONUNBUFFERED=1
 
 # Point to your desktop session
@@ -21,7 +21,7 @@ Environment=XAUTHORITY=/home/swag/.Xauthority
 # Helpful for some libs on Wayland/X11 bridges:
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
 
-ExecStart=/home/swag/Documents/git/.venv/bin/python /home/swag/Documents/git/midiTrackerApp/main.py
+ExecStart=/home/swag/Documents/git/midiTrackerApp/.venv/bin/python /home/swag/Documents/git/midiTrackerApp/main.py
 Restart=on-failure
 RestartSec=2
 
