@@ -779,7 +779,7 @@ class MidiTrackerGUI:
 
                     # LED visualization
                     self.led_controller.note_off(note)
-                        # immediate push to web UI
+                    # immediate push to web UI
                     try:
                         self.post_event({
                             'type': 'note_off', 'note': note,
