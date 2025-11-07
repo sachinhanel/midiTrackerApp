@@ -306,6 +306,31 @@ class MidiTrackerGUI:
             except Exception as e:
                 return jsonify({'ok': False, 'error': str(e)}), 500
 
+        @app.route('/api/led/preset', methods=['POST'])
+        def api_led_preset():
+            try:
+                data = request.get_json()
+                note_color_data = data.get('note_color')
+                background_color_data = data.get('background_color')
+                sustain_pedal_hold = data.get('sustain_pedal_hold', False)
+
+                # Convert dict to tuple if present
+                note_color = tuple(note_color_data.values()) if note_color_data else None
+                background_color = tuple(background_color_data.values()) if background_color_data else None
+
+                success = self.led_controller.set_color_preset(
+                    note_color=note_color,
+                    background_color=background_color,
+                    sustain_pedal_hold=sustain_pedal_hold
+                )
+
+                if success:
+                    return jsonify({'ok': True, 'message': 'Color preset applied'})
+                else:
+                    return jsonify({'ok': False, 'error': 'Failed to apply preset'}), 400
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
         def run_server():
             # bind only to localhost for security
             app.run(host='127.0.0.1', port=5001, threaded=True, use_reloader=False)
@@ -885,6 +910,9 @@ class MidiTrackerGUI:
                             }
                             self.db_queue.put(operation)
 
+                            # LED controller sustain pedal on
+                            self.led_controller.sustain_pedal_on()
+
                             self.add_debug_message(f"🦶 PEDAL ON")
                             # Notify web UI about pedal on
                             try:
@@ -898,12 +926,15 @@ class MidiTrackerGUI:
                             # Pedal released
                             self.pedal_pressed = False
 
-                            # If pedal is not pressed, clear sustained notes that are no longer active  
+                            # If pedal is not pressed, clear sustained notes that are no longer active
                             if self.sustained_notes:
                                 for n in list(self.sustained_notes):
                                     if n not in self.active_notes:
                                         self.sustained_notes.discard(n)
-                                        
+
+                            # LED controller sustain pedal off
+                            self.led_controller.sustain_pedal_off()
+
                             self.add_debug_message(f"🦶 PEDAL OFF")
                             # Notify web UI about pedal off
                             try:

@@ -20,6 +20,42 @@
     <div style="margin-top: 15px;">
       <button id="status_leds_toggle" style="padding: 8px 16px;">Toggle Status LEDs (0-4)</button>
     </div>
+
+    <!-- Color Preset Controls -->
+    <div style="margin-top: 25px; padding: 15px; background: #e8f4f8; border-radius: 4px;">
+      <h4>Color Presets</h4>
+
+      <!-- Note Color -->
+      <div style="margin-bottom: 15px;">
+        <label style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="note_color_enabled" checked>
+          <strong>Note Color:</strong>
+          <input type="color" id="note_color_picker" value="#0000ff" style="width: 50px; height: 30px;">
+          <span id="note_color_value">#0000FF (Blue)</span>
+        </label>
+      </div>
+
+      <!-- Background Color -->
+      <div style="margin-bottom: 15px;">
+        <label style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="background_color_enabled">
+          <strong>Background Color:</strong>
+          <input type="color" id="background_color_picker" value="#1a1a1a" style="width: 50px; height: 30px;">
+          <span id="background_color_value">#1A1A1A (Dark Gray)</span>
+        </label>
+      </div>
+
+      <!-- Sustain Pedal Option -->
+      <div style="margin-bottom: 10px;">
+        <label style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="sustain_pedal_hold">
+          <strong>Keep notes lit while sustain pedal is held</strong>
+        </label>
+      </div>
+
+      <button id="apply_preset_btn" style="padding: 8px 20px; margin-top: 10px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply Preset</button>
+    </div>
+
     <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
       <h4>Configuration</h4>
       <p><strong>Total LEDs:</strong> 144</p>

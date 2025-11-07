@@ -59,6 +59,12 @@ class LEDController:
         self.status_leds_enabled = True
         self.brightness = self.LED_BRIGHTNESS
 
+        # Color preset settings
+        self.note_color = (0, 0, 255)  # Default blue
+        self.background_color = None   # No background by default
+        self.sustain_pedal_hold = False
+        self.sustain_pedal_active = False
+
         if WS281X_AVAILABLE:
             try:
                 if USING_NEOPIXEL:
@@ -141,17 +147,22 @@ class LEDController:
             print(f"LED note_on: note {midi_note} out of range")
             return
 
-        print(f"LED note_on: note={midi_note} -> LED {led_index}, setting blue")
+        print(f"LED note_on: note={midi_note} -> LED {led_index}, setting color {self.note_color}")
         with self.lock:
             self.active_notes.add(midi_note)
-            # Blue color (R=0, G=0, B=255)
-            self._set_pixel(led_index, 0, 0, 255)
+            # Use configured note color
+            if self.note_color:
+                self._set_pixel(led_index, self.note_color[0], self.note_color[1], self.note_color[2])
             self._show()
         print(f"LED note_on: complete for LED {led_index}")
 
     def note_off(self, midi_note):
         """Turn off LED when note is released"""
         if not self.enabled or not self.strip:
+            return
+
+        # If sustain pedal is held and sustain_pedal_hold is enabled, don't turn off
+        if self.sustain_pedal_hold and self.sustain_pedal_active:
             return
 
         led_index = self.midi_note_to_led(midi_note)
@@ -161,8 +172,11 @@ class LEDController:
         with self.lock:
             if midi_note in self.active_notes:
                 self.active_notes.discard(midi_note)
-            # Turn off (black)
-            self._set_pixel(led_index, 0, 0, 0)
+            # Turn off or set to background color
+            if self.background_color:
+                self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+            else:
+                self._set_pixel(led_index, 0, 0, 0)
             self._show()
 
     def update_status_leds(self):
@@ -204,6 +218,60 @@ class LEDController:
 
         print(f"Brightness set to {self.brightness}/255 ({int(self.brightness/255*100)}%)")
         return True
+
+    def set_color_preset(self, note_color=None, background_color=None, sustain_pedal_hold=False):
+        """
+        Set color preset for LED visualization
+
+        Args:
+            note_color: RGB tuple (r, g, b) or None to disable note color
+            background_color: RGB tuple (r, g, b) or None for black background
+            sustain_pedal_hold: bool, whether to keep notes lit while sustain pedal is held
+        """
+        self.note_color = note_color
+        self.background_color = background_color
+        self.sustain_pedal_hold = sustain_pedal_hold
+
+        # Apply background color to all piano keys immediately
+        if self.enabled and self.strip:
+            with self.lock:
+                for midi_note in range(self.PIANO_LOWEST_NOTE, self.PIANO_HIGHEST_NOTE + 1):
+                    led_index = self.midi_note_to_led(midi_note)
+                    if led_index is not None:
+                        # Skip active notes
+                        if midi_note not in self.active_notes:
+                            if background_color:
+                                self._set_pixel(led_index, background_color[0], background_color[1], background_color[2])
+                            else:
+                                self._set_pixel(led_index, 0, 0, 0)
+                self._show()
+
+        print(f"Color preset updated: note={note_color}, bg={background_color}, sustain_hold={sustain_pedal_hold}")
+        return True
+
+    def sustain_pedal_on(self):
+        """Called when sustain pedal is pressed"""
+        self.sustain_pedal_active = True
+        print("Sustain pedal ON")
+
+    def sustain_pedal_off(self):
+        """Called when sustain pedal is released"""
+        self.sustain_pedal_active = False
+        print("Sustain pedal OFF")
+
+        # If sustain_pedal_hold is enabled, turn off all active notes now
+        if self.sustain_pedal_hold and self.enabled and self.strip:
+            with self.lock:
+                notes_to_clear = list(self.active_notes)
+                for midi_note in notes_to_clear:
+                    led_index = self.midi_note_to_led(midi_note)
+                    if led_index is not None:
+                        if self.background_color:
+                            self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+                        else:
+                            self._set_pixel(led_index, 0, 0, 0)
+                self.active_notes.clear()
+                self._show()
 
     def enable(self):
         """Enable LED visualization"""
