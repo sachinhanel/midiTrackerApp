@@ -244,6 +244,47 @@ class MidiTrackerGUI:
             except Exception as e:
                 return jsonify({'ok': False, 'error': str(e)})
 
+        # LED control endpoints
+        @app.route('/api/led/status')
+        def api_led_status():
+            try:
+                return jsonify({
+                    'ok': True,
+                    'enabled': self.led_controller.enabled,
+                    'hardware_available': self.led_controller.strip is not None
+                })
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)})
+
+        @app.route('/api/led/enable', methods=['POST'])
+        def api_led_enable():
+            try:
+                success = self.led_controller.enable()
+                if success:
+                    return jsonify({'ok': True, 'message': 'LED visualization enabled'})
+                else:
+                    return jsonify({'ok': False, 'error': 'Hardware not available'}), 400
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
+        @app.route('/api/led/disable', methods=['POST'])
+        def api_led_disable():
+            try:
+                self.led_controller.disable()
+                return jsonify({'ok': True, 'message': 'LED visualization disabled'})
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
+        @app.route('/api/led/test', methods=['POST'])
+        def api_led_test():
+            try:
+                if not self.led_controller.strip:
+                    return jsonify({'ok': False, 'error': 'Hardware not available'}), 400
+                self.led_controller.test_pattern()
+                return jsonify({'ok': True, 'message': 'Test pattern completed'})
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
         def run_server():
             # bind only to localhost for security
             app.run(host='127.0.0.1', port=5001, threaded=True, use_reloader=False)

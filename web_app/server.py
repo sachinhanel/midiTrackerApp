@@ -22,7 +22,12 @@ if project_root not in sys.path:
 from database_manager import DatabaseManager
 from energy_calculator import PianoEnergyCalculator
 from chord_window_m21 import chord_symbol_from_midi
-from led_controller import get_led_controller
+
+# LED control is handled by main.py on port 5001
+# Web server just proxies requests
+import requests as http_requests
+
+MAIN_APP_URL = 'http://127.0.0.1:5001'
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 # Prefer eventlet if available for efficient websocket handling; fall back to threading for dev
@@ -449,58 +454,45 @@ def api_state():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
-# LED Strip Control API Endpoints
+# LED Strip Control API Endpoints (proxy to main app on port 5001)
 @app.route('/api/led/status')
 def api_led_status():
-    """Get LED controller status"""
+    """Get LED controller status (proxy to main app)"""
     try:
-        led = get_led_controller()
-        return jsonify({
-            'ok': True,
-            'enabled': led.enabled,
-            'hardware_available': led.strip is not None
-        })
+        resp = http_requests.get(f'{MAIN_APP_URL}/api/led/status', timeout=2)
+        return jsonify(resp.json())
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
 
 
 @app.route('/api/led/enable', methods=['POST'])
 def api_led_enable():
-    """Enable LED visualization"""
+    """Enable LED visualization (proxy to main app)"""
     try:
-        led = get_led_controller()
-        success = led.enable()
-        if success:
-            return jsonify({'ok': True, 'message': 'LED visualization enabled'})
-        else:
-            return jsonify({'ok': False, 'error': 'Hardware not available'}), 400
+        resp = http_requests.post(f'{MAIN_APP_URL}/api/led/enable', timeout=2)
+        return jsonify(resp.json()), resp.status_code
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
 
 
 @app.route('/api/led/disable', methods=['POST'])
 def api_led_disable():
-    """Disable LED visualization"""
+    """Disable LED visualization (proxy to main app)"""
     try:
-        led = get_led_controller()
-        led.disable()
-        return jsonify({'ok': True, 'message': 'LED visualization disabled'})
+        resp = http_requests.post(f'{MAIN_APP_URL}/api/led/disable', timeout=2)
+        return jsonify(resp.json()), resp.status_code
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
 
 
 @app.route('/api/led/test', methods=['POST'])
 def api_led_test():
-    """Run LED test pattern"""
+    """Run LED test pattern (proxy to main app)"""
     try:
-        led = get_led_controller()
-        if not led.strip:
-            return jsonify({'ok': False, 'error': 'Hardware not available'}), 400
-
-        led.test_pattern()
-        return jsonify({'ok': True, 'message': 'Test pattern completed'})
+        resp = http_requests.post(f'{MAIN_APP_URL}/api/led/test', timeout=5)
+        return jsonify(resp.json()), resp.status_code
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)}), 500
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
 
 
 def background_stats_broadcaster():
