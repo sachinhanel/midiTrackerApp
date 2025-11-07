@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const disableBtn = document.getElementById('led_disable_btn');
   const testBtn = document.getElementById('led_test_btn');
   const statusText = document.getElementById('led_status_text');
+  const brightnessSlider = document.getElementById('brightness_slider');
+  const brightnessValue = document.getElementById('brightness_value');
+  const statusLedsToggle = document.getElementById('status_leds_toggle');
 
   // Get initial status
   fetch('/api/led/status')
@@ -76,6 +79,37 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Error running test pattern');
       statusText.textContent = 'Error';
       statusText.style.color = 'red';
+    }
+  });
+
+  // Brightness slider
+  brightnessSlider.addEventListener('input', async () => {
+    const value = brightnessSlider.value;
+    const percentage = Math.round((value / 255) * 100);
+    brightnessValue.textContent = `${percentage}%`;
+
+    try {
+      await fetch('/api/led/brightness', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ brightness: parseInt(value) })
+      });
+    } catch (e) {
+      console.error('Error setting brightness:', e);
+    }
+  });
+
+  // Status LEDs toggle
+  statusLedsToggle.addEventListener('click', async () => {
+    try {
+      const response = await fetch('/api/led/status_leds/toggle', { method: 'POST' });
+      const data = await response.json();
+      if (!data.ok) {
+        alert('Failed to toggle status LEDs: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      console.error('Error toggling status LEDs:', e);
+      alert('Error toggling status LEDs');
     }
   });
 

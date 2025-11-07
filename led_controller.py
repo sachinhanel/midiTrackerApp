@@ -56,6 +56,8 @@ class LEDController:
         self.active_notes = set()
         self.lock = threading.Lock()
         self.using_neopixel = USING_NEOPIXEL
+        self.status_leds_enabled = True
+        self.brightness = self.LED_BRIGHTNESS
 
         if WS281X_AVAILABLE:
             try:
@@ -168,10 +170,40 @@ class LEDController:
         if not self.strip:
             return
 
-        # Green indicator LEDs (R=0, G=50, B=0)
-        for i in range(5):
-            self._set_pixel(i, 0, 50, 0)
+        if self.status_leds_enabled:
+            # Green indicator LEDs (R=0, G=50, B=0)
+            for i in range(5):
+                self._set_pixel(i, 0, 50, 0)
+        else:
+            # Turn off status LEDs
+            for i in range(5):
+                self._set_pixel(i, 0, 0, 0)
         self._show()
+
+    def toggle_status_leds(self):
+        """Toggle status LEDs on/off"""
+        self.status_leds_enabled = not self.status_leds_enabled
+        self.update_status_leds()
+        return self.status_leds_enabled
+
+    def set_brightness(self, brightness):
+        """Set LED strip brightness (0-255)"""
+        if not self.strip:
+            return False
+
+        self.brightness = max(0, min(255, brightness))
+
+        if self.using_neopixel:
+            # NeoPixel uses 0.0-1.0 brightness
+            self.strip.brightness = self.brightness / 255.0
+            self.strip.show()
+        else:
+            # rpi_ws281x brightness is set at initialization
+            # Would need to reinitialize or manually scale colors
+            print(f"Warning: Brightness change requires restart for rpi_ws281x")
+
+        print(f"Brightness set to {self.brightness}/255 ({int(self.brightness/255*100)}%)")
+        return True
 
     def enable(self):
         """Enable LED visualization"""

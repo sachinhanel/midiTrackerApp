@@ -495,6 +495,27 @@ def api_led_test():
         return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
 
 
+@app.route('/api/led/brightness', methods=['POST'])
+def api_led_brightness():
+    """Set LED brightness (proxy to main app)"""
+    try:
+        resp = http_requests.post(f'{MAIN_APP_URL}/api/led/brightness',
+                                 json=request.get_json(), timeout=2)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
+
+
+@app.route('/api/led/status_leds/toggle', methods=['POST'])
+def api_led_status_leds_toggle():
+    """Toggle status LEDs (proxy to main app)"""
+    try:
+        resp = http_requests.post(f'{MAIN_APP_URL}/api/led/status_leds/toggle', timeout=2)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
+
+
 def background_stats_broadcaster():
     """Periodically query DB for lightweight stats and broadcast to clients."""
     while True:

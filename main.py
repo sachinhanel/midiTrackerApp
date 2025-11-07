@@ -285,6 +285,27 @@ class MidiTrackerGUI:
             except Exception as e:
                 return jsonify({'ok': False, 'error': str(e)}), 500
 
+        @app.route('/api/led/brightness', methods=['POST'])
+        def api_led_brightness():
+            try:
+                data = request.get_json()
+                brightness = data.get('brightness', 128)
+                success = self.led_controller.set_brightness(brightness)
+                if success:
+                    return jsonify({'ok': True, 'brightness': brightness})
+                else:
+                    return jsonify({'ok': False, 'error': 'Hardware not available'}), 400
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
+        @app.route('/api/led/status_leds/toggle', methods=['POST'])
+        def api_led_status_leds_toggle():
+            try:
+                enabled = self.led_controller.toggle_status_leds()
+                return jsonify({'ok': True, 'enabled': enabled})
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
         def run_server():
             # bind only to localhost for security
             app.run(host='127.0.0.1', port=5001, threaded=True, use_reloader=False)
