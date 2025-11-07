@@ -7,7 +7,8 @@ Wants=graphical.target
 
 [Service]
 Type=simple
-User=swag
+User=root
+Group=swag
 WorkingDirectory=/home/swag/Documents/git/midiTrackerApp
 
 # Use project venv
@@ -15,7 +16,7 @@ Environment="VIRTUAL_ENV=/home/swag/Documents/git/midiTrackerApp/.venv"
 Environment="PATH=/home/swag/Documents/git/midiTrackerApp/.venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 Environment=PYTHONUNBUFFERED=1
 
-# Point to your desktop session
+# Point to user's desktop session
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/swag/.Xauthority
 # Helpful for some libs on Wayland/X11 bridges:
