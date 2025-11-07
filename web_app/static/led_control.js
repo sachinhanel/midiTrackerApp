@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const statusText = document.getElementById('led_status_text');
   const brightnessSlider = document.getElementById('brightness_slider');
   const brightnessValue = document.getElementById('brightness_value');
+  const backgroundBrightnessSlider = document.getElementById('background_brightness_slider');
+  const backgroundBrightnessValue = document.getElementById('background_brightness_value');
   const statusLedsToggle = document.getElementById('status_leds_toggle');
 
   // Color preset elements
@@ -109,6 +111,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Background brightness slider
+  backgroundBrightnessSlider.addEventListener('input', () => {
+    const value = backgroundBrightnessSlider.value;
+    backgroundBrightnessValue.textContent = `${value}%`;
+    // Background brightness is applied when preset is applied, not immediately
+  });
+
   // Status LEDs toggle
   statusLedsToggle.addEventListener('click', async () => {
     try {
@@ -156,7 +165,17 @@ document.addEventListener('DOMContentLoaded', () => {
   applyPresetBtn.addEventListener('click', async () => {
     try {
       const noteColor = noteColorEnabled.checked ? hexToRgb(noteColorPicker.value) : null;
-      const backgroundColor = backgroundColorEnabled.checked ? hexToRgb(backgroundColorPicker.value) : null;
+      let backgroundColor = backgroundColorEnabled.checked ? hexToRgb(backgroundColorPicker.value) : null;
+
+      // Apply background brightness scaling if background color is enabled
+      if (backgroundColor && backgroundColorEnabled.checked) {
+        const bgBrightness = parseInt(backgroundBrightnessSlider.value) / 100;
+        backgroundColor = {
+          r: Math.round(backgroundColor.r * bgBrightness),
+          g: Math.round(backgroundColor.g * bgBrightness),
+          b: Math.round(backgroundColor.b * bgBrightness)
+        };
+      }
 
       const preset = {
         note_color: noteColor,

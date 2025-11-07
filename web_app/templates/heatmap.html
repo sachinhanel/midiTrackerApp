@@ -13,9 +13,15 @@
     </div>
     <div style="margin-top: 20px;">
       <label for="brightness_slider" style="display: block; margin-bottom: 8px;">
-        <strong>Brightness:</strong> <span id="brightness_value">50%</span>
+        <strong>Overall Brightness:</strong> <span id="brightness_value">50%</span>
       </label>
       <input type="range" id="brightness_slider" min="0" max="255" value="128" style="width: 300px;">
+    </div>
+    <div style="margin-top: 15px;">
+      <label for="background_brightness_slider" style="display: block; margin-bottom: 8px;">
+        <strong>Background Brightness:</strong> <span id="background_brightness_value">100%</span>
+      </label>
+      <input type="range" id="background_brightness_slider" min="0" max="100" value="100" style="width: 300px;">
     </div>
     <div style="margin-top: 15px;">
       <button id="status_leds_toggle" style="padding: 8px 16px;">Toggle Status LEDs (0-4)</button>
