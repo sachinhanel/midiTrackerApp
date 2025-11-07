@@ -127,18 +127,25 @@ class LEDController:
 
     def note_on(self, midi_note, velocity):
         """Light up LED when note is pressed"""
-        if not self.enabled or not self.strip:
+        if not self.enabled:
+            print(f"LED note_on: disabled (note={midi_note})")
+            return
+        if not self.strip:
+            print(f"LED note_on: no strip (note={midi_note})")
             return
 
         led_index = self.midi_note_to_led(midi_note)
         if led_index is None:
+            print(f"LED note_on: note {midi_note} out of range")
             return
 
+        print(f"LED note_on: note={midi_note} -> LED {led_index}, setting blue")
         with self.lock:
             self.active_notes.add(midi_note)
             # Blue color (R=0, G=0, B=255)
             self._set_pixel(led_index, 0, 0, 255)
             self._show()
+        print(f"LED note_on: complete for LED {led_index}")
 
     def note_off(self, midi_note):
         """Turn off LED when note is released"""
