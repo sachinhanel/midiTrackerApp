@@ -10,6 +10,8 @@ Simple LED Strip Controller for MIDI Piano Visualization
 
 import time
 import threading
+import json
+import os
 
 WS281X_AVAILABLE = False
 PixelStrip = None
@@ -62,6 +64,8 @@ class LEDController:
         # Color preset settings
         self.note_color = (0, 0, 255)  # Default blue
         self.background_color = None   # No background by default
+        self.background_color_full = None  # Store the full brightness background color
+        self.background_brightness = 100  # Background brightness percentage (0-100)
         self.sustain_pedal_hold = False
         self.sustain_pedal_active = False
 
@@ -102,6 +106,11 @@ class LEDController:
                 self.strip = None
         else:
             print("LED Controller: LED library not available (simulation mode)")
+
+        # Auto-load saved preset if it exists
+        if os.path.exists('led_preset.json'):
+            print("Found saved preset, loading...")
+            self.load_preset()
 
     def midi_note_to_led(self, midi_note):
         """
@@ -219,17 +228,21 @@ class LEDController:
         print(f"Brightness set to {self.brightness}/255 ({int(self.brightness/255*100)}%)")
         return True
 
-    def set_color_preset(self, note_color=None, background_color=None, sustain_pedal_hold=False):
+    def set_color_preset(self, note_color=None, background_color=None, background_color_full=None, background_brightness=100, sustain_pedal_hold=False):
         """
         Set color preset for LED visualization
 
         Args:
             note_color: RGB tuple (r, g, b) or None to disable note color
-            background_color: RGB tuple (r, g, b) or None for black background
+            background_color: RGB tuple (r, g, b) with brightness applied, or None for black background
+            background_color_full: RGB tuple (r, g, b) at full brightness (for saving/loading)
+            background_brightness: Background brightness percentage (0-100)
             sustain_pedal_hold: bool, whether to keep notes lit while sustain pedal is held
         """
         self.note_color = note_color
         self.background_color = background_color
+        self.background_color_full = background_color_full if background_color_full else background_color
+        self.background_brightness = background_brightness
         self.sustain_pedal_hold = sustain_pedal_hold
 
         # Apply background color to all piano keys immediately
@@ -249,29 +262,113 @@ class LEDController:
         print(f"Color preset updated: note={note_color}, bg={background_color}, sustain_hold={sustain_pedal_hold}")
         return True
 
+    def save_preset(self, preset_file='led_preset.json'):
+        """
+        Save current color preset to a JSON file
+
+        Args:
+            preset_file: filename to save preset to (relative to current directory)
+        """
+        preset_data = {
+            'note_color': self.note_color,
+            'background_color_full': self.background_color_full,  # Save full brightness version
+            'background_brightness': self.background_brightness,
+            'sustain_pedal_hold': self.sustain_pedal_hold,
+            'brightness': self.brightness
+        }
+
+        try:
+            with open(preset_file, 'w') as f:
+                json.dump(preset_data, f, indent=2)
+            print(f"Preset saved to {preset_file}")
+            return True
+        except Exception as e:
+            print(f"Error saving preset: {e}")
+            return False
+
+    def load_preset(self, preset_file='led_preset.json'):
+        """
+        Load color preset from a JSON file
+
+        Args:
+            preset_file: filename to load preset from (relative to current directory)
+        """
+        if not os.path.exists(preset_file):
+            print(f"Preset file {preset_file} not found")
+            return False
+
+        try:
+            with open(preset_file, 'r') as f:
+                preset_data = json.load(f)
+
+            # Convert lists back to tuples if needed
+            note_color = tuple(preset_data['note_color']) if preset_data.get('note_color') else None
+            background_color_full = tuple(preset_data['background_color_full']) if preset_data.get('background_color_full') else None
+            background_brightness = preset_data.get('background_brightness', 100)
+
+            # Apply background brightness to get actual background color
+            background_color = None
+            if background_color_full:
+                brightness_factor = background_brightness / 100.0
+                background_color = (
+                    int(background_color_full[0] * brightness_factor),
+                    int(background_color_full[1] * brightness_factor),
+                    int(background_color_full[2] * brightness_factor)
+                )
+
+            # Apply the preset
+            self.set_color_preset(
+                note_color=note_color,
+                background_color=background_color,
+                background_color_full=background_color_full,
+                background_brightness=background_brightness,
+                sustain_pedal_hold=preset_data.get('sustain_pedal_hold', False)
+            )
+
+            # Apply overall brightness if saved
+            if 'brightness' in preset_data:
+                self.set_brightness(preset_data['brightness'])
+
+            print(f"Preset loaded from {preset_file}")
+            return True
+        except Exception as e:
+            print(f"Error loading preset: {e}")
+            return False
+
     def sustain_pedal_on(self):
         """Called when sustain pedal is pressed"""
         self.sustain_pedal_active = True
         print("Sustain pedal ON")
 
-    def sustain_pedal_off(self):
-        """Called when sustain pedal is released"""
+    def sustain_pedal_off(self, currently_held_notes=None):
+        """
+        Called when sustain pedal is released
+
+        Args:
+            currently_held_notes: set of MIDI notes that are currently being physically held down
+        """
         self.sustain_pedal_active = False
         print("Sustain pedal OFF")
 
-        # If sustain_pedal_hold is enabled, turn off all active notes now
+        # If sustain_pedal_hold is enabled, turn off notes that are NOT currently being held
         if self.sustain_pedal_hold and self.enabled and self.strip:
+            if currently_held_notes is None:
+                currently_held_notes = set()
+
             with self.lock:
                 notes_to_clear = list(self.active_notes)
                 for midi_note in notes_to_clear:
-                    led_index = self.midi_note_to_led(midi_note)
-                    if led_index is not None:
-                        if self.background_color:
-                            self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
-                        else:
-                            self._set_pixel(led_index, 0, 0, 0)
-                self.active_notes.clear()
+                    # Only turn off LEDs for notes that are NOT currently being held
+                    if midi_note not in currently_held_notes:
+                        led_index = self.midi_note_to_led(midi_note)
+                        if led_index is not None:
+                            if self.background_color:
+                                self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+                            else:
+                                self._set_pixel(led_index, 0, 0, 0)
+                        self.active_notes.discard(midi_note)
                 self._show()
+                print(f"Sustain release: cleared {len(notes_to_clear) - len(currently_held_notes)} notes, kept {len(currently_held_notes)} held notes")
 
     def enable(self):
         """Enable LED visualization"""

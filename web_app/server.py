@@ -527,6 +527,26 @@ def api_led_preset():
         return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
 
 
+@app.route('/api/led/preset/save', methods=['POST'])
+def api_led_preset_save():
+    """Save LED preset (proxy to main app)"""
+    try:
+        resp = http_requests.post(f'{MAIN_APP_URL}/api/led/preset/save', timeout=2)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
+
+
+@app.route('/api/led/preset/load', methods=['POST'])
+def api_led_preset_load():
+    """Load LED preset (proxy to main app)"""
+    try:
+        resp = http_requests.post(f'{MAIN_APP_URL}/api/led/preset/load', timeout=2)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
+
+
 def background_stats_broadcaster():
     """Periodically query DB for lightweight stats and broadcast to clients."""
     while True:

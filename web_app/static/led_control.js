@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const backgroundColorValue = document.getElementById('background_color_value');
   const sustainPedalHold = document.getElementById('sustain_pedal_hold');
   const applyPresetBtn = document.getElementById('apply_preset_btn');
+  const savePresetBtn = document.getElementById('save_preset_btn');
+  const loadPresetBtn = document.getElementById('load_preset_btn');
 
   // Get initial status
   fetch('/api/led/status')
@@ -165,21 +167,25 @@ document.addEventListener('DOMContentLoaded', () => {
   applyPresetBtn.addEventListener('click', async () => {
     try {
       const noteColor = noteColorEnabled.checked ? hexToRgb(noteColorPicker.value) : null;
-      let backgroundColor = backgroundColorEnabled.checked ? hexToRgb(backgroundColorPicker.value) : null;
+      const backgroundColorFull = backgroundColorEnabled.checked ? hexToRgb(backgroundColorPicker.value) : null;
+      const backgroundBrightnessPct = parseInt(backgroundBrightnessSlider.value);
 
       // Apply background brightness scaling if background color is enabled
-      if (backgroundColor && backgroundColorEnabled.checked) {
-        const bgBrightness = parseInt(backgroundBrightnessSlider.value) / 100;
+      let backgroundColor = null;
+      if (backgroundColorFull && backgroundColorEnabled.checked) {
+        const bgBrightness = backgroundBrightnessPct / 100;
         backgroundColor = {
-          r: Math.round(backgroundColor.r * bgBrightness),
-          g: Math.round(backgroundColor.g * bgBrightness),
-          b: Math.round(backgroundColor.b * bgBrightness)
+          r: Math.round(backgroundColorFull.r * bgBrightness),
+          g: Math.round(backgroundColorFull.g * bgBrightness),
+          b: Math.round(backgroundColorFull.b * bgBrightness)
         };
       }
 
       const preset = {
         note_color: noteColor,
         background_color: backgroundColor,
+        background_color_full: backgroundColorFull,
+        background_brightness: backgroundBrightnessPct,
         sustain_pedal_hold: sustainPedalHold.checked
       };
 
@@ -198,6 +204,46 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.error('Error applying preset:', e);
       alert('Error applying color preset');
+    }
+  });
+
+  // Save preset button
+  savePresetBtn.addEventListener('click', async () => {
+    try {
+      const response = await fetch('/api/led/preset/save', {
+        method: 'POST'
+      });
+
+      const data = await response.json();
+      if (data.ok) {
+        alert('Preset saved successfully! It will be loaded automatically on next boot.');
+      } else {
+        alert('Failed to save preset: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      console.error('Error saving preset:', e);
+      alert('Error saving preset');
+    }
+  });
+
+  // Load preset button
+  loadPresetBtn.addEventListener('click', async () => {
+    try {
+      const response = await fetch('/api/led/preset/load', {
+        method: 'POST'
+      });
+
+      const data = await response.json();
+      if (data.ok) {
+        alert('Preset loaded successfully!');
+        // Optionally reload the page to show updated values
+        setTimeout(() => window.location.reload(), 500);
+      } else {
+        alert('Failed to load preset: ' + (data.error || 'Preset file not found'));
+      }
+    } catch (e) {
+      console.error('Error loading preset:', e);
+      alert('Error loading preset');
     }
   });
 

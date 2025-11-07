@@ -312,15 +312,20 @@ class MidiTrackerGUI:
                 data = request.get_json()
                 note_color_data = data.get('note_color')
                 background_color_data = data.get('background_color')
+                background_color_full_data = data.get('background_color_full')
+                background_brightness = data.get('background_brightness', 100)
                 sustain_pedal_hold = data.get('sustain_pedal_hold', False)
 
                 # Convert dict to tuple if present
                 note_color = tuple(note_color_data.values()) if note_color_data else None
                 background_color = tuple(background_color_data.values()) if background_color_data else None
+                background_color_full = tuple(background_color_full_data.values()) if background_color_full_data else None
 
                 success = self.led_controller.set_color_preset(
                     note_color=note_color,
                     background_color=background_color,
+                    background_color_full=background_color_full,
+                    background_brightness=background_brightness,
                     sustain_pedal_hold=sustain_pedal_hold
                 )
 
@@ -328,6 +333,28 @@ class MidiTrackerGUI:
                     return jsonify({'ok': True, 'message': 'Color preset applied'})
                 else:
                     return jsonify({'ok': False, 'error': 'Failed to apply preset'}), 400
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
+        @app.route('/api/led/preset/save', methods=['POST'])
+        def api_led_preset_save():
+            try:
+                success = self.led_controller.save_preset()
+                if success:
+                    return jsonify({'ok': True, 'message': 'Preset saved successfully'})
+                else:
+                    return jsonify({'ok': False, 'error': 'Failed to save preset'}), 500
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
+        @app.route('/api/led/preset/load', methods=['POST'])
+        def api_led_preset_load():
+            try:
+                success = self.led_controller.load_preset()
+                if success:
+                    return jsonify({'ok': True, 'message': 'Preset loaded successfully'})
+                else:
+                    return jsonify({'ok': False, 'error': 'Preset file not found'}), 404
             except Exception as e:
                 return jsonify({'ok': False, 'error': str(e)}), 500
 
@@ -932,8 +959,9 @@ class MidiTrackerGUI:
                                     if n not in self.active_notes:
                                         self.sustained_notes.discard(n)
 
-                            # LED controller sustain pedal off
-                            self.led_controller.sustain_pedal_off()
+                            # LED controller sustain pedal off, pass currently held notes
+                            currently_held = set(self.active_notes.keys())
+                            self.led_controller.sustain_pedal_off(currently_held_notes=currently_held)
 
                             self.add_debug_message(f"🦶 PEDAL OFF")
                             # Notify web UI about pedal off
