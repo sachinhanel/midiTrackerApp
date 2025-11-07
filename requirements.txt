@@ -1,0 +1,8 @@
+flask
+flask-socketio
+python-rtmidi
+numpy
+pillow
+requests
+matplotlib
+music21
