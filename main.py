@@ -118,7 +118,7 @@ class MidiTrackerGUI:
         self.other_bytes = 0
         
         # Auto-connection preferences
-        self.auto_input_keyword = "XPIANO"
+        self.auto_input_keyword = "CH345"
         self.auto_output_keyword = "loopmidi"
         self.auto_connect_enabled = True
         
