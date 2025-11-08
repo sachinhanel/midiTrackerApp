@@ -719,8 +719,15 @@ function renderPianoHeatmap(canvasId, counts){
     return [1,3,6,8,10].includes(noteInOctave);
   }
 
+  // Count white keys to calculate proper spacing
+  let whiteKeyCount = 0;
+  for(let i=0;i<totalKeys;i++){
+    if(!isBlackKey(midiMin + i)) whiteKeyCount++;
+  }
+  const whiteKeyWidth = width / whiteKeyCount;
+
   // draw white keys first
-  const keyWidth = width / totalKeys;
+  let whiteKeyIndex = 0;
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
     // Only draw white keys in this pass
@@ -730,23 +737,33 @@ function renderPianoHeatmap(canvasId, counts){
       // color from light gray to blue
       const alpha = 0.2 + intensity * 0.8;
       ctx.fillStyle = `rgba(43,140,190,${alpha.toFixed(2)})`;
-      ctx.fillRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+      ctx.fillRect(whiteKeyIndex * whiteKeyWidth, 0, Math.ceil(whiteKeyWidth), height * 0.7);
       // draw key border
       ctx.strokeStyle = '#ddd';
-      ctx.strokeRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+      ctx.strokeRect(whiteKeyIndex * whiteKeyWidth, 0, Math.ceil(whiteKeyWidth), height * 0.7);
+      whiteKeyIndex++;
     }
   }
 
-  // draw black key overlays on top
+  // draw black key overlays on top, positioned between white keys
+  whiteKeyIndex = 0;
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
-    if(isBlackKey(midi)){
+    if(!isBlackKey(midi)){
+      whiteKeyIndex++;
+    } else {
       const c = counts[midi] || 0;
       const intensity = c / maxCount;
       const alpha = 0.15 + intensity * 0.85;
-      const bw = Math.ceil(keyWidth * 0.6);
+      const blackKeyWidth = whiteKeyWidth * 0.6;
+      const xPos = whiteKeyIndex * whiteKeyWidth - blackKeyWidth / 2;
+
       ctx.fillStyle = `rgba(0,0,0,${alpha.toFixed(2)})`;
-      ctx.fillRect(i * keyWidth + keyWidth*0.2, 0, bw, height * 0.45);
+      ctx.fillRect(xPos, 0, blackKeyWidth, height * 0.45);
+
+      // Draw border for black keys
+      ctx.strokeStyle = '#000';
+      ctx.strokeRect(xPos, 0, blackKeyWidth, height * 0.45);
     }
   }
 
@@ -755,11 +772,24 @@ function renderPianoHeatmap(canvasId, counts){
   ctx.fillStyle = '#333';
   ctx.font = '10px sans-serif';
   ctx.textAlign = 'center';
+  whiteKeyIndex = 0;
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
     const c = counts[midi] || 0;
-    const x = i * keyWidth + keyWidth/2;
-    const y = height * 0.78;
+    let x, y;
+
+    if(!isBlackKey(midi)){
+      // White key
+      x = whiteKeyIndex * whiteKeyWidth + whiteKeyWidth/2;
+      y = height * 0.78;
+      whiteKeyIndex++;
+    } else {
+      // Black key
+      const blackKeyWidth = whiteKeyWidth * 0.6;
+      x = whiteKeyIndex * whiteKeyWidth;
+      y = height * 0.52;
+    }
+
     // draw rotated small text (vertical)
     ctx.save();
     ctx.translate(x, y);
@@ -774,20 +804,59 @@ function renderPianoHeatmap(canvasId, counts){
   canvas.onmousemove = function(ev){
     const rect = canvas.getBoundingClientRect();
     const px = ev.clientX - rect.left;
-    const keyIndex = Math.floor(px / keyWidth);
-    if(keyIndex < 0 || keyIndex >= totalKeys){ tooltip.style.display = 'none'; return; }
-    const midi = midiMin + keyIndex;
-    const count = counts[midi] || 0;
-    const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-    const name = noteNames[midi % 12] + (Math.floor(midi/12)-1);
-    tooltip.style.display = 'block';
-    tooltip.textContent = `${name}: ${count}`;
-    // Position tooltip centered horizontally over the key and slightly above the piano
-    const left = rect.left + keyIndex * keyWidth + keyWidth/2;
-    const top = rect.top + height * 0.65;
-    // Place using page coordinates but keep tooltip within the heatmap container bounds if possible
-    tooltip.style.left = `${left}px`;
-    tooltip.style.top = `${top}px`;
+
+    // Find which key is under the mouse (check black keys first, then white keys)
+    let hoveredMidi = null;
+    let tooltipX = px;
+
+    // Check black keys first (they're on top)
+    let whiteIdx = 0;
+    for(let i=0;i<totalKeys;i++){
+      const midi = midiMin + i;
+      if(!isBlackKey(midi)){
+        whiteIdx++;
+      } else {
+        const blackKeyWidth = whiteKeyWidth * 0.6;
+        const xPos = whiteIdx * whiteKeyWidth - blackKeyWidth / 2;
+        if(px >= xPos && px < xPos + blackKeyWidth){
+          hoveredMidi = midi;
+          tooltipX = xPos + blackKeyWidth / 2;
+          break;
+        }
+      }
+    }
+
+    // If no black key, check white keys
+    if(hoveredMidi === null){
+      const whiteKeyIdx = Math.floor(px / whiteKeyWidth);
+      if(whiteKeyIdx >= 0 && whiteKeyIdx < whiteKeyCount){
+        // Find the corresponding MIDI note for this white key
+        let whiteCount = 0;
+        for(let i=0;i<totalKeys;i++){
+          const midi = midiMin + i;
+          if(!isBlackKey(midi)){
+            if(whiteCount === whiteKeyIdx){
+              hoveredMidi = midi;
+              tooltipX = whiteKeyIdx * whiteKeyWidth + whiteKeyWidth / 2;
+              break;
+            }
+            whiteCount++;
+          }
+        }
+      }
+    }
+
+    if(hoveredMidi !== null){
+      const count = counts[hoveredMidi] || 0;
+      const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      const name = noteNames[hoveredMidi % 12] + (Math.floor(hoveredMidi/12)-1);
+      tooltip.style.display = 'block';
+      tooltip.textContent = `${name}: ${count}`;
+      tooltip.style.left = `${rect.left + tooltipX}px`;
+      tooltip.style.top = `${rect.top + height * 0.65}px`;
+    } else {
+      tooltip.style.display = 'none';
+    }
   };
   canvas.onmouseout = function(){ const t = document.getElementById('heatmap_tooltip'); if(t) t.style.display = 'none'; };
 }

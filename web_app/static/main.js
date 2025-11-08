@@ -135,8 +135,15 @@ function renderLivePiano(activeNotes){
     return [1,3,6,8,10].includes(noteInOctave);
   }
 
+  // Count white keys to calculate proper spacing
+  let whiteKeyCount = 0;
+  for(let i=0;i<totalKeys;i++){
+    if(!isBlackKey(midiMin + i)) whiteKeyCount++;
+  }
+  const whiteKeyWidth = width / whiteKeyCount;
+
   // Draw all white keys first
-  const keyWidth = width / totalKeys;
+  let whiteKeyIndex = 0;
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
     const isActive = activeSet.has(midi);
@@ -148,26 +155,39 @@ function renderLivePiano(activeNotes){
       } else {
         ctx.fillStyle = 'rgba(240,240,240,0.5)'; // Light gray for inactive
       }
-      ctx.fillRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+      ctx.fillRect(whiteKeyIndex * whiteKeyWidth, 0, Math.ceil(whiteKeyWidth), height * 0.7);
 
       // Draw key border
       ctx.strokeStyle = '#999';
-      ctx.strokeRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+      ctx.strokeRect(whiteKeyIndex * whiteKeyWidth, 0, Math.ceil(whiteKeyWidth), height * 0.7);
+
+      whiteKeyIndex++;
     }
   }
 
-  // Draw black keys on top
+  // Draw black keys on top, positioned between white keys
+  whiteKeyIndex = 0;
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
-    if(isBlackKey(midi)){
+
+    if(!isBlackKey(midi)){
+      whiteKeyIndex++;
+    } else {
+      // Black key positioned at the boundary between white keys
       const isActive = activeSet.has(midi);
-      const bw = Math.ceil(keyWidth * 0.6);
+      const blackKeyWidth = whiteKeyWidth * 0.6;
+      const xPos = whiteKeyIndex * whiteKeyWidth - blackKeyWidth / 2;
+
       if(isActive){
         ctx.fillStyle = 'rgba(255,140,0,0.95)'; // Bright orange for active black keys
       } else {
         ctx.fillStyle = 'rgba(30,30,30,0.8)'; // Dark gray for inactive black keys
       }
-      ctx.fillRect(i * keyWidth + keyWidth*0.2, 0, bw, height * 0.45);
+      ctx.fillRect(xPos, 0, blackKeyWidth, height * 0.45);
+
+      // Draw border for black keys
+      ctx.strokeStyle = '#000';
+      ctx.strokeRect(xPos, 0, blackKeyWidth, height * 0.45);
     }
   }
 
@@ -177,19 +197,59 @@ function renderLivePiano(activeNotes){
     canvas.onmousemove = function(ev){
       const rect = canvas.getBoundingClientRect();
       const px = ev.clientX - rect.left;
-      const keyIndex = Math.floor(px / keyWidth);
-      if(keyIndex < 0 || keyIndex >= totalKeys){ tooltip.style.display = 'none'; return; }
-      const midi = midiMin + keyIndex;
-      const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-      const name = noteNames[midi % 12] + (Math.floor(midi/12)-1);
-      const isActive = activeSet.has(midi);
-      tooltip.style.display = 'block';
-      tooltip.textContent = `${name}${isActive ? ' (ACTIVE)' : ''}`;
-      // Position tooltip
-      const left = rect.left + keyIndex * keyWidth + keyWidth/2;
-      const top = rect.top + height * 0.65;
-      tooltip.style.left = `${left}px`;
-      tooltip.style.top = `${top}px`;
+
+      // Find which key is under the mouse (check black keys first, then white keys)
+      let hoveredMidi = null;
+      let tooltipX = px;
+
+      // Check black keys first (they're on top)
+      let whiteIdx = 0;
+      for(let i=0;i<totalKeys;i++){
+        const midi = midiMin + i;
+        if(!isBlackKey(midi)){
+          whiteIdx++;
+        } else {
+          const blackKeyWidth = whiteKeyWidth * 0.6;
+          const xPos = whiteIdx * whiteKeyWidth - blackKeyWidth / 2;
+          if(px >= xPos && px < xPos + blackKeyWidth){
+            hoveredMidi = midi;
+            tooltipX = xPos + blackKeyWidth / 2;
+            break;
+          }
+        }
+      }
+
+      // If no black key, check white keys
+      if(hoveredMidi === null){
+        const whiteKeyIdx = Math.floor(px / whiteKeyWidth);
+        if(whiteKeyIdx >= 0 && whiteKeyIdx < whiteKeyCount){
+          // Find the corresponding MIDI note for this white key
+          let whiteCount = 0;
+          for(let i=0;i<totalKeys;i++){
+            const midi = midiMin + i;
+            if(!isBlackKey(midi)){
+              if(whiteCount === whiteKeyIdx){
+                hoveredMidi = midi;
+                tooltipX = whiteKeyIdx * whiteKeyWidth + whiteKeyWidth / 2;
+                break;
+              }
+              whiteCount++;
+            }
+          }
+        }
+      }
+
+      if(hoveredMidi !== null){
+        const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        const name = noteNames[hoveredMidi % 12] + (Math.floor(hoveredMidi/12)-1);
+        const isActive = activeSet.has(hoveredMidi);
+        tooltip.style.display = 'block';
+        tooltip.textContent = `${name}${isActive ? ' (ACTIVE)' : ''}`;
+        tooltip.style.left = `${rect.left + tooltipX}px`;
+        tooltip.style.top = `${rect.top + height * 0.65}px`;
+      } else {
+        tooltip.style.display = 'none';
+      }
     };
     canvas.onmouseout = function(){ if(tooltip) tooltip.style.display = 'none'; };
   }
