@@ -37,8 +37,9 @@ socket.on('state_update', (data) => {
   // auto-scroll debug to bottom
   if (dbg) { dbg.scrollTop = dbg.scrollHeight; }
 
-  // Update live piano visualization
-  renderLivePiano(data.active_notes || []);
+  // Update live piano visualization - combine active_notes and sustained_notes
+  const allNotes = [...(data.active_notes || []), ...(data.sustained_notes || [])];
+  renderLivePiano(allNotes);
 });
 
 socket.on('chord_update', (data) => {
@@ -77,8 +78,9 @@ async function pollingFallback() {
       if (lu) lu.textContent = new Date().toLocaleTimeString();
       const live = document.getElementById('live_status');
       if (live) { live.textContent = 'LIVE (poll)'; live.style.color = 'orange'; }
-      // Update live piano visualization
-      renderLivePiano(data.active_notes || []);
+      // Update live piano visualization - combine active_notes and sustained_notes
+      const allNotes = [...(data.active_notes || []), ...(data.sustained_notes || [])];
+      renderLivePiano(allNotes);
     }
   } catch (e) {
     // ignore
@@ -126,31 +128,38 @@ function renderLivePiano(activeNotes){
     });
   }
 
-  // Draw all keys
+  // Helper to check if a MIDI note is a black key
+  function isBlackKey(midi){
+    const noteInOctave = midi % 12;
+    // Black keys: C#(1), D#(3), F#(6), G#(8), A#(10)
+    return [1,3,6,8,10].includes(noteInOctave);
+  }
+
+  // Draw all white keys first
   const keyWidth = width / totalKeys;
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
     const isActive = activeSet.has(midi);
 
-    // White keys (base layer)
-    if(isActive){
-      ctx.fillStyle = 'rgba(255,215,0,0.9)'; // Bright gold for active notes
-    } else {
-      ctx.fillStyle = 'rgba(240,240,240,0.5)'; // Light gray for inactive
-    }
-    ctx.fillRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+    // Only draw white keys in this pass
+    if(!isBlackKey(midi)){
+      if(isActive){
+        ctx.fillStyle = 'rgba(255,215,0,0.9)'; // Bright gold for active notes
+      } else {
+        ctx.fillStyle = 'rgba(240,240,240,0.5)'; // Light gray for inactive
+      }
+      ctx.fillRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
 
-    // Draw key border
-    ctx.strokeStyle = '#999';
-    ctx.strokeRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+      // Draw key border
+      ctx.strokeStyle = '#999';
+      ctx.strokeRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+    }
   }
 
-  // Draw black key overlays
-  const blackSet = [1,3,6,8,10]; // C#, D#, F#, G#, A#
+  // Draw black keys on top
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
-    const noteInOctave = midi % 12;
-    if(blackSet.includes(noteInOctave)){
+    if(isBlackKey(midi)){
       const isActive = activeSet.has(midi);
       const bw = Math.ceil(keyWidth * 0.6);
       if(isActive){
@@ -158,7 +167,7 @@ function renderLivePiano(activeNotes){
       } else {
         ctx.fillStyle = 'rgba(30,30,30,0.8)'; // Dark gray for inactive black keys
       }
-      ctx.fillRect(i * keyWidth + keyWidth*0.7, 0, bw, height * 0.45);
+      ctx.fillRect(i * keyWidth + keyWidth*0.2, 0, bw, height * 0.45);
     }
   }
 

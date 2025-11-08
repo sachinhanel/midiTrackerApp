@@ -712,34 +712,41 @@ function renderPianoHeatmap(canvasId, counts){
   for(let k=midiMin;k<=midiMax;k++) maxCount = Math.max(maxCount, counts[k]||0);
   if(maxCount === 0) maxCount = 1;
 
-  // draw white keys as equal-width rectangles; small piano mockup, 88 keys
+  // Helper to check if a MIDI note is a black key
+  function isBlackKey(midi){
+    const noteInOctave = midi % 12;
+    // Black keys: C#(1), D#(3), F#(6), G#(8), A#(10)
+    return [1,3,6,8,10].includes(noteInOctave);
+  }
+
+  // draw white keys first
   const keyWidth = width / totalKeys;
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
-    const c = counts[midi] || 0;
-    const intensity = c / maxCount;
-    // color from light gray to blue
-    const blue = Math.round(80 + intensity * 175);
-    const alpha = 0.2 + intensity * 0.8;
-    ctx.fillStyle = `rgba(43,140,190,${alpha.toFixed(2)})`;
-    ctx.fillRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
-    // draw key border
-    ctx.strokeStyle = '#ddd';
-    ctx.strokeRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+    // Only draw white keys in this pass
+    if(!isBlackKey(midi)){
+      const c = counts[midi] || 0;
+      const intensity = c / maxCount;
+      // color from light gray to blue
+      const alpha = 0.2 + intensity * 0.8;
+      ctx.fillStyle = `rgba(43,140,190,${alpha.toFixed(2)})`;
+      ctx.fillRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+      // draw key border
+      ctx.strokeStyle = '#ddd';
+      ctx.strokeRect(i * keyWidth, 0, Math.ceil(keyWidth), height * 0.7);
+    }
   }
 
-  // draw black key overlays
-  const blackSet = [1,3,6,8,10];
+  // draw black key overlays on top
   for(let i=0;i<totalKeys;i++){
     const midi = midiMin + i;
-    const noteInOctave = midi % 12;
-    if(blackSet.includes(noteInOctave)){
+    if(isBlackKey(midi)){
       const c = counts[midi] || 0;
       const intensity = c / maxCount;
       const alpha = 0.15 + intensity * 0.85;
       const bw = Math.ceil(keyWidth * 0.6);
       ctx.fillStyle = `rgba(0,0,0,${alpha.toFixed(2)})`;
-      ctx.fillRect(i * keyWidth + keyWidth*0.7, 0, bw, height * 0.45);
+      ctx.fillRect(i * keyWidth + keyWidth*0.2, 0, bw, height * 0.45);
     }
   }
 
