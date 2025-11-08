@@ -128,7 +128,18 @@ function renderSimpleTable(container, data){
     for(let i = start; i < end; i++){
       const row = data[i];
       const tr = document.createElement('tr');
-      finalKeys.forEach(k=>{ const td = document.createElement('td'); td.textContent = row[k]; tr.appendChild(td)});
+      finalKeys.forEach(k=>{
+        const td = document.createElement('td');
+        // Format time fields as HH:MM:SS
+        if(k === 'session_seconds' && row[k] !== undefined && row[k] !== null){
+          td.textContent = formatHMS(row[k]);
+        } else if(k === 'note_time_ms' && row[k] !== undefined && row[k] !== null){
+          td.textContent = formatHMS(row[k] / 1000); // Convert ms to seconds
+        } else {
+          td.textContent = row[k];
+        }
+        tr.appendChild(td);
+      });
       tbody.appendChild(tr);
     }
   }
@@ -253,7 +264,7 @@ function renderNoteDistributionTable(targetId, notes){
         return names[m % 12] + octave;
       }
   const noteName = n.note_name || midiToName(n.midi_note);
-  const durFmt = formatDuration(n.total_duration_ms || 0);
+  const durFmt = formatHMS((n.total_duration_ms || 0) / 1000); // Convert ms to seconds for HH:MM:SS
   const pct = total_notes ? (n.count / total_notes * 100.0) : 0.0;
   const avg_velocity = n.count ? (n.total_velocity / n.count) : 0.0;
   const cells = [n.midi_note, noteName, round2(n.count), pct.toFixed(2) + '%', avg_velocity ? round2(avg_velocity) : '0.00', (n.total_energy||0).toFixed(2), durFmt];
@@ -378,14 +389,39 @@ async function updateStats(){
 let rangeTotalsData = null;
 
 function updateRangeTotals(data, range){
-  // Calculate totals from the current time-series data
+  // Calculate totals based on the current period (not cumulative)
   let totalNotes = 0;
   let totalEnergy = 0;
   let totalNoteDurationMs = 0;
   let totalSessionSeconds = 0;
   let totalDataBytes = 0;
 
-  data.forEach(d => {
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const currentHour = now.getHours();
+  const currentWeekStart = getWeekStart(now);
+  const currentMonth = now.toISOString().slice(0, 7);
+
+  // Filter data to only include the current period
+  let filteredData = [];
+  if(range === 'hourly'){
+    // Current hour only
+    filteredData = data.filter(d => d.date === today && d.hour === currentHour);
+  } else if(range === 'daily'){
+    // Current day only
+    filteredData = data.filter(d => d.date === today);
+  } else if(range === 'weekly'){
+    // Current week only
+    filteredData = data.filter(d => d.week_start === currentWeekStart || d.week_key === getISOWeek(now));
+  } else if(range === 'monthly'){
+    // Current month only
+    filteredData = data.filter(d => (d.month_start && d.month_start.startsWith(currentMonth)) || d.month_key === currentMonth);
+  } else {
+    // Trends: sum everything (all-time)
+    filteredData = data;
+  }
+
+  filteredData.forEach(d => {
     totalNotes += Number(d.total_notes || 0);
     totalEnergy += Number(d.total_energy || 0);
     totalNoteDurationMs += Number(d.note_time_ms || 0);
@@ -406,20 +442,47 @@ function updateRangeTotals(data, range){
   displayRangeTotals();
 }
 
+// Helper function to get ISO week (YYYY-WW format)
+function getISOWeek(date){
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  const weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  return d.getFullYear() + '-' + String(weekNo).padStart(2, '0');
+}
+
+// Helper function to get week start date (Monday of current week)
+function getWeekStart(date){
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
+  const monday = new Date(d.setDate(diff));
+  return monday.toISOString().slice(0, 10);
+}
+
 function displayRangeTotals(){
   if(!rangeTotalsData) return;
   const {totalNotes, totalEnergy, totalNoteDurationMs, totalSessionSeconds, totalDataBytes, range} = rangeTotalsData;
 
-  // Update range label
+  // Update range label and card labels
   const rangeLabelMap = {
-    'hourly': 'Today',
-    'daily': 'Last 60 Days',
-    'weekly': 'Last 52 Weeks',
-    'monthly': 'Last 24 Months',
+    'hourly': 'Current Hour',
+    'daily': 'Today',
+    'weekly': 'This Week',
+    'monthly': 'This Month',
     'trends': 'All-Time'
   };
   const rangeLabel = document.getElementById('range_totals_label');
   if(rangeLabel) rangeLabel.textContent = rangeLabelMap[range] || range;
+
+  // Update card labels to match the range
+  const labelSuffix = range === 'trends' ? ' (All-Time)' : '';
+  if(document.getElementById('range_label_notes')) document.getElementById('range_label_notes').textContent = 'Notes' + labelSuffix;
+  if(document.getElementById('range_label_energy')) document.getElementById('range_label_energy').textContent = 'Energy (J)' + labelSuffix;
+  if(document.getElementById('range_label_note_hours')) document.getElementById('range_label_note_hours').textContent = 'Note Duration (hrs)' + labelSuffix;
+  if(document.getElementById('range_label_practice_hours')) document.getElementById('range_label_practice_hours').textContent = 'Practice Hours' + labelSuffix;
+  if(document.getElementById('range_label_midi_mb')) document.getElementById('range_label_midi_mb').textContent = 'MIDI data (MB)' + labelSuffix;
 
   // Update display values
   const noteHours = totalNoteDurationMs / (1000.0 * 3600.0);
