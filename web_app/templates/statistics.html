@@ -3,7 +3,16 @@
 <section id="stats">
   <h2>Statistics</h2>
 
-  <!-- Top small totals box -->
+  <!-- Toggle for number format -->
+  <div style="margin-bottom: 12px;">
+    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+      <input type="checkbox" id="format_toggle" checked>
+      <strong>Show shortened numbers (e.g., 367.2k)</strong>
+    </label>
+  </div>
+
+  <!-- All-time totals box -->
+  <div style="margin-bottom: 8px;"><strong>All-time Totals:</strong></div>
   <div id="top_totals_box" style="display:flex; gap:12px; margin-bottom:12px;">
   <div class="small_total_card"><div class="small_total_value" id="total_notes_top">-</div><div class="small_total_label">All-time Notes</div></div>
   <div class="small_total_card"><div class="small_total_value" id="total_energy_top">-</div><div class="small_total_label">All-time Energy (J)</div></div>
@@ -11,6 +20,16 @@
     <div class="small_total_card"><div class="small_total_value" id="total_practice_hours_top">-</div><div class="small_total_label">Practice Hours</div></div>
     <div class="small_total_card"><div class="small_total_value" id="total_pedal_presses_top">-</div><div class="small_total_label">Pedal Presses</div></div>
     <div class="small_total_card"><div class="small_total_value" id="total_midi_mb_top">-</div><div class="small_total_label">MIDI data (MB)</div></div>
+  </div>
+
+  <!-- Time-series totals box (changes based on selected range) -->
+  <div style="margin-bottom: 8px;"><strong><span id="range_totals_label">Daily</span> Totals:</strong></div>
+  <div id="range_totals_box" style="display:flex; gap:12px; margin-bottom:12px;">
+    <div class="small_total_card"><div class="small_total_value" id="range_total_notes">-</div><div class="small_total_label">Notes</div></div>
+    <div class="small_total_card"><div class="small_total_value" id="range_total_energy">-</div><div class="small_total_label">Energy (J)</div></div>
+    <div class="small_total_card"><div class="small_total_value" id="range_note_hours">-</div><div class="small_total_label">Note Duration (hrs)</div></div>
+    <div class="small_total_card"><div class="small_total_value" id="range_practice_hours">-</div><div class="small_total_label">Practice Hours</div></div>
+    <div class="small_total_card"><div class="small_total_value" id="range_midi_mb">-</div><div class="small_total_label">MIDI data (MB)</div></div>
   </div>
 
   <div class="panel">

@@ -94,7 +94,7 @@ function renderSimpleTable(container, data){
   if(!data.length){ el.textContent = 'No data'; return; }
 
   // Define standard column order: date fields first, then key fields, then metrics
-  const columnOrder = ['date', 'week_start', 'month_start', 'hour', 'week_key', 'month_key', 'total_notes', 'session_seconds', 'total_energy', 'avg_velocity'];
+  const columnOrder = ['date', 'week_start', 'month_start', 'hour', 'week_key', 'month_key', 'total_notes', 'session_seconds', 'note_time_ms', 'total_data', 'total_energy', 'avg_velocity'];
 
   // Get columns that exist in the data, in the preferred order
   const allKeys = Object.keys(data[0]);
@@ -280,11 +280,15 @@ function renderNoteDistributionTable(targetId, notes){
   renderPage(currentPage);
 }
 
+let useShortFormat = true; // Global flag for number formatting
+
 function formatBigNumber(v){
   if(v === null || v === undefined) return '-';
-  if(v >= 1e6) return (v/1e6).toFixed(1)+'M';
-  if(v >= 1e3) return (v/1e3).toFixed(1)+'k';
-  return String(v);
+  if(useShortFormat){
+    if(v >= 1e6) return (v/1e6).toFixed(1)+'M';
+    if(v >= 1e3) return (v/1e3).toFixed(1)+'k';
+  }
+  return String(Math.round(v));
 }
 
 async function updateStats(){
@@ -361,10 +365,72 @@ async function updateStats(){
     return copy;
   });
   renderSimpleTable('stats_table', normalized);
+
+  // Calculate and display range totals
+  updateRangeTotals(data, range);
   }catch(e){
     console.error('updateStats error', e);
     const el = document.getElementById('stats_table'); if(el) el.textContent = 'Error loading stats: ' + (e && e.message ? e.message : String(e));
   }
+}
+
+// Store range totals globally so we can re-format them when toggle changes
+let rangeTotalsData = null;
+
+function updateRangeTotals(data, range){
+  // Calculate totals from the current time-series data
+  let totalNotes = 0;
+  let totalEnergy = 0;
+  let totalNoteDurationMs = 0;
+  let totalSessionSeconds = 0;
+  let totalDataBytes = 0;
+
+  data.forEach(d => {
+    totalNotes += Number(d.total_notes || 0);
+    totalEnergy += Number(d.total_energy || 0);
+    totalNoteDurationMs += Number(d.note_time_ms || 0);
+    totalSessionSeconds += Number(d.session_seconds || 0);
+    totalDataBytes += Number(d.total_data || 0);
+  });
+
+  // Store data globally
+  rangeTotalsData = {
+    totalNotes,
+    totalEnergy,
+    totalNoteDurationMs,
+    totalSessionSeconds,
+    totalDataBytes,
+    range
+  };
+
+  displayRangeTotals();
+}
+
+function displayRangeTotals(){
+  if(!rangeTotalsData) return;
+  const {totalNotes, totalEnergy, totalNoteDurationMs, totalSessionSeconds, totalDataBytes, range} = rangeTotalsData;
+
+  // Update range label
+  const rangeLabelMap = {
+    'hourly': 'Today',
+    'daily': 'Last 60 Days',
+    'weekly': 'Last 52 Weeks',
+    'monthly': 'Last 24 Months',
+    'trends': 'All-Time'
+  };
+  const rangeLabel = document.getElementById('range_totals_label');
+  if(rangeLabel) rangeLabel.textContent = rangeLabelMap[range] || range;
+
+  // Update display values
+  const noteHours = totalNoteDurationMs / (1000.0 * 3600.0);
+  const practiceHours = totalSessionSeconds / 3600.0;
+  const midiMB = totalDataBytes / (1024.0 * 1024.0);
+
+  document.getElementById('range_total_notes').textContent = formatBigNumber(totalNotes);
+  document.getElementById('range_total_energy').textContent = totalEnergy.toFixed(2);
+  document.getElementById('range_note_hours').textContent = noteHours.toFixed(1);
+  document.getElementById('range_practice_hours').textContent = practiceHours.toFixed(1);
+  document.getElementById('range_midi_mb').textContent = midiMB.toFixed(2);
 }
 
 function round2(v){
@@ -415,20 +481,29 @@ async function updateNoteDistribution(){
   }
 }
 
+// Store all-time totals globally so we can re-format them when toggle changes
+let allTimeTotals = null;
+
 // Fetch and display all-time totals at top (from server)
 async function fetchAllTotals(){
   try{
     const r = await fetch('/api/stats/all_totals');
     const j = await r.json();
     if(!j.ok) return;
-    const t = j.totals || {};
-    if(document.getElementById('total_notes_top')) document.getElementById('total_notes_top').textContent = formatBigNumber(t.total_notes || 0);
-    if(document.getElementById('total_energy_top')) document.getElementById('total_energy_top').textContent = (t.total_energy || 0).toFixed(2);
-    if(document.getElementById('total_note_hours_top')) document.getElementById('total_note_hours_top').textContent = (t.total_note_duration_hours || 0).toFixed(1);
-    if(document.getElementById('total_practice_hours_top')) document.getElementById('total_practice_hours_top').textContent = (t.total_practice_hours || 0).toFixed(1);
-    if(document.getElementById('total_pedal_presses_top')) document.getElementById('total_pedal_presses_top').textContent = (t.total_pedal_presses || 0);
-    if(document.getElementById('total_midi_mb_top')) document.getElementById('total_midi_mb_top').textContent = (t.total_midi_mb || 0).toFixed(2);
+    allTimeTotals = j.totals || {};
+    displayAllTimeTotals();
   }catch(e){ console.error(e); }
+}
+
+function displayAllTimeTotals(){
+  if(!allTimeTotals) return;
+  const t = allTimeTotals;
+  if(document.getElementById('total_notes_top')) document.getElementById('total_notes_top').textContent = formatBigNumber(t.total_notes || 0);
+  if(document.getElementById('total_energy_top')) document.getElementById('total_energy_top').textContent = (t.total_energy || 0).toFixed(2);
+  if(document.getElementById('total_note_hours_top')) document.getElementById('total_note_hours_top').textContent = (t.total_note_duration_hours || 0).toFixed(1);
+  if(document.getElementById('total_practice_hours_top')) document.getElementById('total_practice_hours_top').textContent = (t.total_practice_hours || 0).toFixed(1);
+  if(document.getElementById('total_pedal_presses_top')) document.getElementById('total_pedal_presses_top').textContent = formatBigNumber(t.total_pedal_presses || 0);
+  if(document.getElementById('total_midi_mb_top')) document.getElementById('total_midi_mb_top').textContent = (t.total_midi_mb || 0).toFixed(2);
 }
 
 function formatDuration(ms){
@@ -491,6 +566,18 @@ document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('y_select').addEventListener('change', ()=>{ updateStats().catch(e=>console.error(e)); });
   document.getElementById('dist_date').addEventListener('change', ()=>{ updateNoteDistribution().catch(e=>console.error(e)); });
   document.getElementById('heatmap_refresh').addEventListener('click', ()=>{ updateHeatmap().catch(e=>console.error(e)); });
+
+  // Toggle event listener for number formatting
+  const formatToggle = document.getElementById('format_toggle');
+  if(formatToggle){
+    formatToggle.addEventListener('change', ()=>{
+      useShortFormat = formatToggle.checked;
+      // Re-display all totals with new format
+      displayAllTimeTotals();
+      displayRangeTotals();
+      updateNoteDistribution().catch(e=>console.error(e));
+    });
+  }
 
   // Load initial data, protective try/catch to avoid leaving Loading...
   fetchAllTotals().catch(e=>console.error(e));
