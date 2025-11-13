@@ -11,6 +11,7 @@
     <h3>MIDI Device Connection</h3>
     <div style="margin-bottom: 12px;">
       <button id="refresh_devices" style="padding: 8px 16px;">Refresh Devices</button>
+      <button id="restart_service" style="padding: 8px 16px; margin-left: 8px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer;">Restart MIDI Service</button>
       <ul id="device_list" style="margin-top: 8px;"></ul>
     </div>
     <div style="display: flex; gap: 8px; align-items: center;">
@@ -19,6 +20,7 @@
       <button id="select_btn" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Connect</button>
     </div>
     <div id="device_status" style="margin-top: 8px; color: #666;"></div>
+    <div id="service_status" style="margin-top: 8px; color: #666; font-style: italic;"></div>
   </div>
 
   <div class="panel">
@@ -27,6 +29,18 @@
     <div id="live_piano_area" style="margin-top:12px; position:relative;">
       <canvas id="live_piano_canvas" width="900" height="120" style="border:1px solid #ccc;"></canvas>
       <div id="live_piano_tooltip" style="position:absolute; pointer-events:none; display:none; background:rgba(0,0,0,0.8); color:#fff; padding:6px 8px; border-radius:4px; font-size:12px; transform:translate(-50%,-120%);"></div>
+    </div>
+    <div style="margin-top:12px; display:flex; gap:12px; align-items:center;">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="audio_enable" />
+        <strong>Enable Piano Audio</strong>
+      </label>
+      <span id="audio_status" style="color:#666; font-size:12px;"></span>
+      <label style="display:flex; align-items:center; gap:6px;">
+        <span style="font-size:12px;">Volume:</span>
+        <input type="range" id="audio_volume" min="0" max="100" value="30" style="width:120px;" />
+        <span id="volume_value" style="font-size:12px; min-width:30px;">30%</span>
+      </label>
     </div>
   </div>
 
@@ -98,7 +112,202 @@ async function selectDevice() {
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('refresh_devices').addEventListener('click', fetchDevices);
   document.getElementById('select_btn').addEventListener('click', selectDevice);
+  document.getElementById('restart_service').addEventListener('click', restartService);
   fetchDevices(); // Auto-fetch on page load
+});
+
+async function restartService() {
+  const statusEl = document.getElementById('service_status');
+  const btn = document.getElementById('restart_service');
+
+  try {
+    btn.disabled = true;
+    btn.textContent = 'Restarting...';
+    statusEl.textContent = 'Restarting MIDI service...';
+    statusEl.style.color = '#ff9800';
+
+    const r = await fetch('/api/control/restart_service', { method: 'POST' });
+    const j = await r.json();
+
+    if (j.ok) {
+      statusEl.textContent = j.message || 'Service restarted successfully. Reconnecting in 5 seconds...';
+      statusEl.style.color = '#4CAF50';
+
+      // Auto-refresh devices after 5 seconds
+      setTimeout(() => {
+        fetchDevices();
+        statusEl.textContent = '';
+      }, 5000);
+    } else {
+      statusEl.textContent = 'Error: ' + (j.error || 'Unknown error');
+      statusEl.style.color = '#f44336';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Failed to restart service: ' + err.message;
+    statusEl.style.color = '#f44336';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Restart MIDI Service';
+  }
+}
+
+// ===== Web MIDI API + Web Audio Synthesis =====
+let audioContext = null;
+let masterGain = null;
+let activeOscillators = new Map(); // MIDI note -> {osc, gain}
+let audioEnabled = false;
+let audioVolume = 0.3;
+
+function initAudio() {
+  if (audioContext) return; // Already initialized
+
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = audioVolume;
+    masterGain.connect(audioContext.destination);
+    console.log('Web Audio initialized');
+  } catch (err) {
+    console.error('Failed to initialize Web Audio:', err);
+    document.getElementById('audio_status').textContent = 'Audio not supported';
+    document.getElementById('audio_status').style.color = '#f44336';
+  }
+}
+
+function playNote(midiNote, velocity) {
+  if (!audioEnabled || !audioContext) return;
+
+  // Resume audio context if suspended (browser autoplay policy)
+  if (audioContext.state === 'suspended') {
+    audioContext.resume();
+  }
+
+  stopNote(midiNote); // Stop if already playing
+
+  // Convert MIDI note to frequency
+  const freq = 440 * Math.pow(2, (midiNote - 69) / 12);
+
+  // Create oscillator with some harmonics for richer sound
+  const osc = audioContext.createOscillator();
+  const gainNode = audioContext.createGain();
+
+  osc.type = 'triangle'; // Triangle wave for piano-like tone
+  osc.frequency.value = freq;
+
+  // Velocity-based volume (MIDI velocity 0-127)
+  const vel = Math.max(0, Math.min(127, velocity)) / 127;
+  const volume = vel * vel * 0.15; // Squared for more natural dynamics, max 0.15
+
+  // Attack-Decay envelope
+  const now = audioContext.currentTime;
+  gainNode.gain.setValueAtTime(0, now);
+  gainNode.gain.linearRampToValueAtTime(volume, now + 0.01); // 10ms attack
+  gainNode.gain.exponentialRampToValueAtTime(volume * 0.7, now + 0.1); // Decay to 70%
+
+  osc.connect(gainNode);
+  gainNode.connect(masterGain);
+  osc.start(now);
+
+  activeOscillators.set(midiNote, {osc, gain: gainNode});
+}
+
+function stopNote(midiNote) {
+  if (!audioContext) return;
+
+  const entry = activeOscillators.get(midiNote);
+  if (!entry) return;
+
+  const {osc, gain} = entry;
+  const now = audioContext.currentTime;
+
+  // Release envelope (fade out)
+  gain.gain.cancelScheduledValues(now);
+  gain.gain.setValueAtTime(gain.gain.value, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3); // 300ms release
+
+  osc.stop(now + 0.3);
+  activeOscillators.delete(midiNote);
+}
+
+// Initialize Web MIDI API
+async function initWebMIDI() {
+  if (!navigator.requestMIDIAccess) {
+    document.getElementById('audio_status').textContent = 'Web MIDI not supported in this browser';
+    document.getElementById('audio_status').style.color = '#f44336';
+    return;
+  }
+
+  try {
+    const midiAccess = await navigator.requestMIDIAccess();
+    document.getElementById('audio_status').textContent = 'Web MIDI ready';
+    document.getElementById('audio_status').style.color = '#4CAF50';
+
+    // Listen to all MIDI inputs
+    for (let input of midiAccess.inputs.values()) {
+      input.onmidimessage = handleMIDIMessage;
+      console.log('Listening to MIDI input:', input.name);
+    }
+
+    // Handle device connections/disconnections
+    midiAccess.onstatechange = (e) => {
+      if (e.port.type === 'input') {
+        if (e.port.state === 'connected') {
+          e.port.onmidimessage = handleMIDIMessage;
+          console.log('MIDI device connected:', e.port.name);
+        } else {
+          console.log('MIDI device disconnected:', e.port.name);
+        }
+      }
+    };
+  } catch (err) {
+    document.getElementById('audio_status').textContent = 'MIDI access denied: ' + err.message;
+    document.getElementById('audio_status').style.color = '#f44336';
+  }
+}
+
+function handleMIDIMessage(event) {
+  const [status, note, velocity] = event.data;
+  const command = status & 0xF0;
+
+  if (command === 0x90 && velocity > 0) {
+    // Note On
+    playNote(note, velocity);
+  } else if (command === 0x80 || (command === 0x90 && velocity === 0)) {
+    // Note Off
+    stopNote(note);
+  }
+  // Pedal (CC 64) is handled by the main app, not here
+}
+
+// UI Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+  const audioEnableCheckbox = document.getElementById('audio_enable');
+  const volumeSlider = document.getElementById('audio_volume');
+  const volumeValue = document.getElementById('volume_value');
+
+  audioEnableCheckbox.addEventListener('change', async (e) => {
+    audioEnabled = e.target.checked;
+
+    if (audioEnabled) {
+      initAudio();
+      await initWebMIDI();
+    } else {
+      // Stop all playing notes
+      for (const [note, _] of activeOscillators) {
+        stopNote(note);
+      }
+      document.getElementById('audio_status').textContent = 'Audio disabled';
+      document.getElementById('audio_status').style.color = '#666';
+    }
+  });
+
+  volumeSlider.addEventListener('input', (e) => {
+    audioVolume = e.target.value / 100;
+    volumeValue.textContent = e.target.value + '%';
+    if (masterGain) {
+      masterGain.gain.value = audioVolume;
+    }
+  });
 });
 </script>
 {% endblock %}

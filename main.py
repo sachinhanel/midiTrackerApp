@@ -147,6 +147,9 @@ class MidiTrackerGUI:
         except Exception:
             # non-fatal if Flask not available here; UI will still work
             self.add_debug_message_direct("Control API not started (Flask missing or error)")
+
+        # Start periodic auto-reconnect check
+        self.start_auto_reconnect_check()
     
     def post_event(self, payload):
         """Send a lightweight payload to the web UI server at /api/event.
@@ -1134,33 +1137,53 @@ class MidiTrackerGUI:
             self.sleep_preventer.stop_monitoring()
             self.add_debug_message("💤 Sleep prevention disabled")
 
+    def start_auto_reconnect_check(self):
+        """Start periodic check to auto-reconnect if device is disconnected"""
+        def check_and_reconnect():
+            if self.auto_connect_enabled and not self.running:
+                # Not currently connected, try to reconnect
+                self.add_debug_message_direct("🔄 Auto-reconnect: Attempting to find and connect to MIDI device...")
+                try:
+                    # Refresh device list first
+                    self.refresh_devices()
+                    # Give it a moment for the device list to update
+                    self.root.after(500, self.auto_connect_on_startup)
+                except Exception as e:
+                    self.add_debug_message_direct(f"⚠️ Auto-reconnect failed: {e}")
+
+            # Schedule next check in 30 seconds
+            self.root.after(30000, check_and_reconnect)
+
+        # Start the first check in 30 seconds
+        self.root.after(30000, check_and_reconnect)
+
     def auto_connect_on_startup(self):
         """Automatically connect to specified device and enable passthrough"""
         if not self.auto_connect_enabled:
             self.add_debug_message_direct("Auto-connection disabled")
             return
-            
+
         try:
             self.add_debug_message_direct(f"🔍 Auto-connecting to device with '{self.auto_input_keyword}' in name...")
-            
+
             target_index = None
             input_devices = self.device_combo['values']
-            
+
             for i, device_name in enumerate(input_devices):
                 if self.auto_input_keyword.lower() in device_name.lower():
                     target_index = i
                     self.add_debug_message_direct(f"✓ Found input device: {device_name}")
                     break
-            
+
             output_index = None
             output_devices = self.output_combo['values']
-            
+
             for i, device_name in enumerate(output_devices):
                 if self.auto_output_keyword.lower() in device_name.lower():
                     output_index = i
                     self.add_debug_message_direct(f"✓ Found output device: {device_name}")
                     break
-            
+
             if target_index is not None:
                 self.device_combo.current(target_index)
                 self.root.after(100, self.auto_connect_sequence, output_index)
@@ -1170,7 +1193,7 @@ class MidiTrackerGUI:
                     self.add_debug_message_direct("Available input devices:")
                     for i, device in enumerate(input_devices):
                         self.add_debug_message_direct(f"  {i}: {device}")
-        
+
         except Exception as e:
             self.add_debug_message_direct(f"Auto-connect error: {e}")
     

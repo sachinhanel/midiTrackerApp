@@ -92,6 +92,28 @@ def proxy_devices():
         return jsonify({'ok': False, 'error': str(e)})
 
 
+@app.route('/api/control/restart_service', methods=['POST'])
+def restart_service():
+    """Restart the MIDI main service."""
+    try:
+        import subprocess
+        # Execute systemctl restart command
+        result = subprocess.run(
+            ['sudo', 'systemctl', 'restart', 'midi-main.service'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            return jsonify({'ok': True, 'message': 'Service restart initiated. Please wait a few seconds for reconnection.'})
+        else:
+            return jsonify({'ok': False, 'error': f'Restart failed: {result.stderr}'}), 500
+    except subprocess.TimeoutExpired:
+        return jsonify({'ok': False, 'error': 'Restart command timed out'}), 500
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @app.route('/api/control/rescan', methods=['POST'])
 def proxy_rescan():
     try:
