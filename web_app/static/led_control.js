@@ -19,9 +19,22 @@ document.addEventListener('DOMContentLoaded', () => {
   const backgroundColorPicker = document.getElementById('background_color_picker');
   const backgroundColorValue = document.getElementById('background_color_value');
   const sustainPedalHold = document.getElementById('sustain_pedal_hold');
+  const doubleLedMode = document.getElementById('double_led_mode');
   const applyPresetBtn = document.getElementById('apply_preset_btn');
   const savePresetBtn = document.getElementById('save_preset_btn');
   const loadPresetBtn = document.getElementById('load_preset_btn');
+
+  // Get initial double LED mode status
+  fetch('/api/led/double_mode')
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok && doubleLedMode) {
+        doubleLedMode.checked = data.double_led_mode;
+      }
+    })
+    .catch(e => {
+      console.error('Error getting double LED mode status:', e);
+    });
 
   // Get initial status
   fetch('/api/led/status')
@@ -131,6 +144,33 @@ document.addEventListener('DOMContentLoaded', () => {
     } catch (e) {
       console.error('Error toggling status LEDs:', e);
       alert('Error toggling status LEDs');
+    }
+  });
+
+  // Double LED mode toggle
+  doubleLedMode.addEventListener('change', async () => {
+    try {
+      const response = await fetch('/api/led/double_mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: doubleLedMode.checked })
+      });
+      const data = await response.json();
+      if (data.ok) {
+        const modeText = doubleLedMode.checked ?
+          'Double LED Mode (2 LEDs per key, 72 keys)' :
+          'Single LED Mode (1 LED per key, 88 keys)';
+        console.log('LED mode changed to:', modeText);
+      } else {
+        alert('Failed to set double LED mode: ' + (data.error || 'Unknown error'));
+        // Revert checkbox on failure
+        doubleLedMode.checked = !doubleLedMode.checked;
+      }
+    } catch (e) {
+      console.error('Error setting double LED mode:', e);
+      alert('Error setting double LED mode');
+      // Revert checkbox on error
+      doubleLedMode.checked = !doubleLedMode.checked;
     }
   });
 

@@ -61,6 +61,13 @@ class LEDController:
         self.status_leds_enabled = True
         self.brightness = self.LED_BRIGHTNESS
 
+        # Double LED mode settings
+        # With 144 LEDs and 2 LEDs per key, we can cover 72 keys (144/2=72)
+        # Skipping 8 keys on each end (16 total) leaves us with middle 72 keys
+        self.double_led_mode = False
+        self.double_led_start_note = 29  # Skip 8 lowest keys: 21-28, start at F#1 (note 29)
+        self.double_led_end_note = 100   # Skip 8 highest keys: 101-108, end at E7 (note 100)
+
         # Color preset settings
         self.note_color = (0, 0, 255)  # Default blue
         self.background_color = None   # No background by default
@@ -114,16 +121,37 @@ class LEDController:
 
     def midi_note_to_led(self, midi_note):
         """
-        Convert MIDI note to LED index
-        MIDI 21 (A0) -> LED 143
-        MIDI 108 (C8) -> LED 56
-        """
-        if midi_note < self.PIANO_LOWEST_NOTE or midi_note > self.PIANO_HIGHEST_NOTE:
-            return None
+        Convert MIDI note to LED index (or indices in double LED mode)
 
-        offset = midi_note - self.PIANO_LOWEST_NOTE
-        led_index = self.LED_COUNT - 1 - offset
-        return led_index
+        Single LED mode (default):
+            MIDI 21 (A0) -> LED 143
+            MIDI 108 (C8) -> LED 56
+            Returns single LED index
+
+        Double LED mode:
+            Uses 2 LEDs per key for 72 keys (notes 29-100)
+            Notes outside this range return None
+            Returns tuple of (led_index1, led_index2)
+        """
+        if self.double_led_mode:
+            # Double LED mode: 2 LEDs per key, covering notes 29-100 (72 keys)
+            if midi_note < self.double_led_start_note or midi_note > self.double_led_end_note:
+                return None  # Note is outside the covered range
+
+            # Calculate offset from start note
+            offset = midi_note - self.double_led_start_note
+            # Each key uses 2 LEDs, starting from LED 143 going down
+            led_index1 = self.LED_COUNT - 1 - (offset * 2)
+            led_index2 = led_index1 - 1
+            return (led_index1, led_index2)
+        else:
+            # Single LED mode (original behavior)
+            if midi_note < self.PIANO_LOWEST_NOTE or midi_note > self.PIANO_HIGHEST_NOTE:
+                return None
+
+            offset = midi_note - self.PIANO_LOWEST_NOTE
+            led_index = self.LED_COUNT - 1 - offset
+            return led_index
 
     def _set_pixel(self, index, r, g, b):
         """Set a pixel color (handles both APIs)"""
@@ -151,19 +179,25 @@ class LEDController:
             print(f"LED note_on: no strip (note={midi_note})")
             return
 
-        led_index = self.midi_note_to_led(midi_note)
-        if led_index is None:
+        led_result = self.midi_note_to_led(midi_note)
+        if led_result is None:
             print(f"LED note_on: note {midi_note} out of range")
             return
 
-        print(f"LED note_on: note={midi_note} -> LED {led_index}, setting color {self.note_color}")
+        print(f"LED note_on: note={midi_note} -> LED {led_result}, setting color {self.note_color}")
         with self.lock:
             self.active_notes.add(midi_note)
             # Use configured note color
             if self.note_color:
-                self._set_pixel(led_index, self.note_color[0], self.note_color[1], self.note_color[2])
+                if isinstance(led_result, tuple):
+                    # Double LED mode
+                    for led_index in led_result:
+                        self._set_pixel(led_index, self.note_color[0], self.note_color[1], self.note_color[2])
+                else:
+                    # Single LED mode
+                    self._set_pixel(led_result, self.note_color[0], self.note_color[1], self.note_color[2])
             self._show()
-        print(f"LED note_on: complete for LED {led_index}")
+        print(f"LED note_on: complete for LED {led_result}")
 
     def note_off(self, midi_note):
         """Turn off LED when note is released"""
@@ -174,18 +208,27 @@ class LEDController:
         if self.sustain_pedal_hold and self.sustain_pedal_active:
             return
 
-        led_index = self.midi_note_to_led(midi_note)
-        if led_index is None:
+        led_result = self.midi_note_to_led(midi_note)
+        if led_result is None:
             return
 
         with self.lock:
             if midi_note in self.active_notes:
                 self.active_notes.discard(midi_note)
             # Turn off or set to background color
-            if self.background_color:
-                self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+            if isinstance(led_result, tuple):
+                # Double LED mode
+                for led_index in led_result:
+                    if self.background_color:
+                        self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+                    else:
+                        self._set_pixel(led_index, 0, 0, 0)
             else:
-                self._set_pixel(led_index, 0, 0, 0)
+                # Single LED mode
+                if self.background_color:
+                    self._set_pixel(led_result, self.background_color[0], self.background_color[1], self.background_color[2])
+                else:
+                    self._set_pixel(led_result, 0, 0, 0)
             self._show()
 
     def update_status_leds(self):
@@ -208,6 +251,52 @@ class LEDController:
         self.status_leds_enabled = not self.status_leds_enabled
         self.update_status_leds()
         return self.status_leds_enabled
+
+    def set_double_led_mode(self, enabled):
+        """
+        Enable or disable double LED mode.
+
+        In double LED mode:
+        - Each piano key lights up 2 LEDs for better visibility
+        - Covers 72 keys (notes 29-100), skipping 8 on each end
+        - Uses all 144 LEDs for piano visualization
+        """
+        self.double_led_mode = enabled
+
+        # Clear all LEDs and reapply background if enabled
+        if self.enabled and self.strip:
+            with self.lock:
+                # Clear all LEDs first
+                for i in range(self.LED_COUNT):
+                    self._set_pixel(i, 0, 0, 0)
+
+                # Reapply background color to new note range
+                if self.double_led_mode:
+                    note_range = range(self.double_led_start_note, self.double_led_end_note + 1)
+                else:
+                    note_range = range(self.PIANO_LOWEST_NOTE, self.PIANO_HIGHEST_NOTE + 1)
+
+                for midi_note in note_range:
+                    led_result = self.midi_note_to_led(midi_note)
+                    if led_result is not None and self.background_color:
+                        if isinstance(led_result, tuple):
+                            for led_index in led_result:
+                                self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+                        else:
+                            self._set_pixel(led_result, self.background_color[0], self.background_color[1], self.background_color[2])
+
+                self._show()
+
+            # Update status LEDs
+            self.update_status_leds()
+
+        mode_str = "Double LED (2 LEDs per key, 72 keys)" if enabled else "Single LED (1 LED per key, 88 keys)"
+        print(f"LED mode set to: {mode_str}")
+        return self.double_led_mode
+
+    def get_double_led_mode(self):
+        """Get current double LED mode status"""
+        return self.double_led_mode
 
     def set_brightness(self, brightness):
         """Set LED strip brightness (0-255)"""
@@ -248,15 +337,30 @@ class LEDController:
         # Apply background color to all piano keys immediately
         if self.enabled and self.strip:
             with self.lock:
-                for midi_note in range(self.PIANO_LOWEST_NOTE, self.PIANO_HIGHEST_NOTE + 1):
-                    led_index = self.midi_note_to_led(midi_note)
-                    if led_index is not None:
+                # Determine note range based on LED mode
+                if self.double_led_mode:
+                    note_range = range(self.double_led_start_note, self.double_led_end_note + 1)
+                else:
+                    note_range = range(self.PIANO_LOWEST_NOTE, self.PIANO_HIGHEST_NOTE + 1)
+
+                for midi_note in note_range:
+                    led_result = self.midi_note_to_led(midi_note)
+                    if led_result is not None:
                         # Skip active notes
                         if midi_note not in self.active_notes:
-                            if background_color:
-                                self._set_pixel(led_index, background_color[0], background_color[1], background_color[2])
+                            if isinstance(led_result, tuple):
+                                # Double LED mode
+                                for led_index in led_result:
+                                    if background_color:
+                                        self._set_pixel(led_index, background_color[0], background_color[1], background_color[2])
+                                    else:
+                                        self._set_pixel(led_index, 0, 0, 0)
                             else:
-                                self._set_pixel(led_index, 0, 0, 0)
+                                # Single LED mode
+                                if background_color:
+                                    self._set_pixel(led_result, background_color[0], background_color[1], background_color[2])
+                                else:
+                                    self._set_pixel(led_result, 0, 0, 0)
                 self._show()
 
         print(f"Color preset updated: note={note_color}, bg={background_color}, sustain_hold={sustain_pedal_hold}")
@@ -274,7 +378,8 @@ class LEDController:
             'background_color_full': self.background_color_full,  # Save full brightness version
             'background_brightness': self.background_brightness,
             'sustain_pedal_hold': self.sustain_pedal_hold,
-            'brightness': self.brightness
+            'brightness': self.brightness,
+            'double_led_mode': self.double_led_mode
         }
 
         try:
@@ -329,6 +434,10 @@ class LEDController:
             if 'brightness' in preset_data:
                 self.set_brightness(preset_data['brightness'])
 
+            # Apply double LED mode if saved
+            if 'double_led_mode' in preset_data:
+                self.set_double_led_mode(preset_data['double_led_mode'])
+
             print(f"Preset loaded from {preset_file}")
             return True
         except Exception as e:
@@ -360,12 +469,21 @@ class LEDController:
                 for midi_note in notes_to_clear:
                     # Only turn off LEDs for notes that are NOT currently being held
                     if midi_note not in currently_held_notes:
-                        led_index = self.midi_note_to_led(midi_note)
-                        if led_index is not None:
-                            if self.background_color:
-                                self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+                        led_result = self.midi_note_to_led(midi_note)
+                        if led_result is not None:
+                            if isinstance(led_result, tuple):
+                                # Double LED mode
+                                for led_index in led_result:
+                                    if self.background_color:
+                                        self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+                                    else:
+                                        self._set_pixel(led_index, 0, 0, 0)
                             else:
-                                self._set_pixel(led_index, 0, 0, 0)
+                                # Single LED mode
+                                if self.background_color:
+                                    self._set_pixel(led_result, self.background_color[0], self.background_color[1], self.background_color[2])
+                                else:
+                                    self._set_pixel(led_result, 0, 0, 0)
                         self.active_notes.discard(midi_note)
                 self._show()
                 print(f"Sustain release: cleared {len(notes_to_clear) - len(currently_held_notes)} notes, kept {len(currently_held_notes)} held notes")

@@ -361,6 +361,27 @@ class MidiTrackerGUI:
             except Exception as e:
                 return jsonify({'ok': False, 'error': str(e)}), 500
 
+        @app.route('/api/led/double_mode', methods=['GET', 'POST'])
+        def api_led_double_mode():
+            try:
+                if request.method == 'GET':
+                    # Get current double LED mode status
+                    return jsonify({
+                        'ok': True,
+                        'double_led_mode': self.led_controller.get_double_led_mode(),
+                        'start_note': self.led_controller.double_led_start_note,
+                        'end_note': self.led_controller.double_led_end_note
+                    })
+                else:
+                    # Set double LED mode
+                    data = request.get_json()
+                    enabled = data.get('enabled', False)
+                    result = self.led_controller.set_double_led_mode(enabled)
+                    mode_str = "Double LED (2 LEDs per key, 72 keys)" if result else "Single LED (1 LED per key, 88 keys)"
+                    return jsonify({'ok': True, 'double_led_mode': result, 'message': f'LED mode set to: {mode_str}'})
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
         def run_server():
             # bind only to localhost for security
             app.run(host='127.0.0.1', port=5001, threaded=True, use_reloader=False)

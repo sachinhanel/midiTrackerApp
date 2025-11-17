@@ -577,6 +577,20 @@ def api_led_preset_load():
         return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
 
 
+@app.route('/api/led/double_mode', methods=['GET', 'POST'])
+def api_led_double_mode():
+    """Get or set double LED mode (proxy to main app)"""
+    try:
+        if request.method == 'GET':
+            resp = http_requests.get(f'{MAIN_APP_URL}/api/led/double_mode', timeout=2)
+        else:
+            resp = http_requests.post(f'{MAIN_APP_URL}/api/led/double_mode',
+                                      json=request.get_json(), timeout=2)
+        return jsonify(resp.json()), resp.status_code
+    except Exception as e:
+        return jsonify({'ok': False, 'error': f'Cannot connect to main app: {str(e)}'}), 500
+
+
 def background_stats_broadcaster():
     """Periodically query DB for lightweight stats and broadcast to clients."""
     while True:

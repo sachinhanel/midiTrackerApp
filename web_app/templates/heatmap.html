@@ -59,6 +59,15 @@
         </label>
       </div>
 
+      <!-- Double LED Mode Option -->
+      <div style="margin-bottom: 10px;">
+        <label style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="double_led_mode">
+          <strong>Double LED Mode (2 LEDs per key, 72 keys)</strong>
+        </label>
+        <p style="margin: 5px 0 0 28px; font-size: 0.85em; color: #666;">Uses 2 LEDs per key for better visibility. Skips 8 keys on each end (notes 29-100).</p>
+      </div>
+
       <div style="margin-top: 10px;">
         <button id="apply_preset_btn" style="padding: 8px 20px; margin-right: 10px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply Preset</button>
         <button id="save_preset_btn" style="padding: 8px 20px; margin-right: 10px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer;">Save Preset</button>
@@ -70,9 +79,10 @@
     <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
       <h4>Configuration</h4>
       <p><strong>Total LEDs:</strong> 144</p>
-      <p><strong>Piano Keys:</strong> 88 (using LEDs 56-143)</p>
+      <p><strong>Single LED Mode:</strong> 88 keys (1 LED per key, LEDs 56-143)</p>
+      <p><strong>Double LED Mode:</strong> 72 keys (2 LEDs per key, notes 29-100, skips 8 on each end)</p>
       <p><strong>Status LEDs:</strong> 5 (LEDs 0-4, green when active)</p>
-      <p><strong>Mapping:</strong> LED 143 = MIDI 21 (A0, lowest key) → LED 56 = MIDI 108 (C8, highest key)</p>
+      <p><strong>Mapping:</strong> LED 143 = lowest key → LED 56 = highest key</p>
       <p><strong>GPIO Pin:</strong> 18 (PWM0)</p>
     </div>
   </div>
