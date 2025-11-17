@@ -76,6 +76,58 @@
       <p style="margin-top: 8px; font-size: 0.9em; color: #666;">Saved presets persist across reboots</p>
     </div>
 
+    <!-- LED Effects Controls -->
+    <div style="margin-top: 25px; padding: 15px; background: #f0e8f8; border-radius: 4px;">
+      <h4>LED Effects</h4>
+
+      <!-- Effect Mode -->
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 8px;"><strong>Effect Mode:</strong></label>
+        <select id="effect_mode" style="padding: 6px; width: 200px;">
+          <option value="static">Static (instant on/off)</option>
+          <option value="fade">Fade Out</option>
+          <option value="sparkle">Sparkle</option>
+        </select>
+      </div>
+
+      <!-- Velocity Brightness -->
+      <div style="margin-bottom: 15px;">
+        <label style="display: flex; align-items: center; gap: 10px;">
+          <input type="checkbox" id="velocity_brightness">
+          <strong>Velocity Brightness</strong> (harder hits = brighter LEDs)
+        </label>
+      </div>
+
+      <!-- Fade Duration -->
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 8px;">
+          <strong>Fade Duration:</strong> <span id="fade_duration_value">1000ms</span>
+        </label>
+        <input type="range" id="fade_duration_slider" min="100" max="5000" value="1000" step="100" style="width: 300px;">
+      </div>
+
+      <!-- Sustain Fade Threshold -->
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 8px;">
+          <strong>Sustain Fade Threshold:</strong> <span id="sustain_threshold_value">30%</span>
+        </label>
+        <input type="range" id="sustain_threshold_slider" min="0" max="100" value="30" style="width: 300px;">
+        <p style="margin: 5px 0 0 0; font-size: 0.85em; color: #666;">Brightness level notes fade to when sustain pedal is held</p>
+      </div>
+
+      <!-- Sparkle Intensity -->
+      <div style="margin-bottom: 15px;">
+        <label style="display: block; margin-bottom: 8px;">
+          <strong>Sparkle Intensity:</strong> <span id="sparkle_intensity_value">20%</span>
+        </label>
+        <input type="range" id="sparkle_intensity_slider" min="0" max="100" value="20" style="width: 300px;">
+      </div>
+
+      <div style="margin-top: 10px;">
+        <button id="apply_effects_btn" style="padding: 8px 20px; background: #9C27B0; color: white; border: none; border-radius: 4px; cursor: pointer;">Apply Effects</button>
+      </div>
+    </div>
+
     <div style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 4px;">
       <h4>Configuration</h4>
       <p><strong>Total LEDs:</strong> 144</p>

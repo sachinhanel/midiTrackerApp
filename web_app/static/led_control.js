@@ -24,6 +24,44 @@ document.addEventListener('DOMContentLoaded', () => {
   const savePresetBtn = document.getElementById('save_preset_btn');
   const loadPresetBtn = document.getElementById('load_preset_btn');
 
+  // Effect controls
+  const effectModeSelect = document.getElementById('effect_mode');
+  const velocityBrightnessCheckbox = document.getElementById('velocity_brightness');
+  const fadeDurationSlider = document.getElementById('fade_duration_slider');
+  const fadeDurationValue = document.getElementById('fade_duration_value');
+  const sustainThresholdSlider = document.getElementById('sustain_threshold_slider');
+  const sustainThresholdValue = document.getElementById('sustain_threshold_value');
+  const sparkleIntensitySlider = document.getElementById('sparkle_intensity_slider');
+  const sparkleIntensityValue = document.getElementById('sparkle_intensity_value');
+  const applyEffectsBtn = document.getElementById('apply_effects_btn');
+
+  // Get initial effect settings
+  fetch('/api/led/effects')
+    .then(r => r.json())
+    .then(data => {
+      if (data.ok) {
+        if (effectModeSelect) effectModeSelect.value = data.effect_mode || 'static';
+        if (velocityBrightnessCheckbox) velocityBrightnessCheckbox.checked = data.velocity_brightness || false;
+        if (fadeDurationSlider) {
+          fadeDurationSlider.value = data.fade_duration_ms || 1000;
+          fadeDurationValue.textContent = `${data.fade_duration_ms || 1000}ms`;
+        }
+        if (sustainThresholdSlider) {
+          const thresholdPct = Math.round((data.sustain_fade_threshold || 0.3) * 100);
+          sustainThresholdSlider.value = thresholdPct;
+          sustainThresholdValue.textContent = `${thresholdPct}%`;
+        }
+        if (sparkleIntensitySlider) {
+          const sparklePct = Math.round((data.sparkle_intensity || 0.2) * 100);
+          sparkleIntensitySlider.value = sparklePct;
+          sparkleIntensityValue.textContent = `${sparklePct}%`;
+        }
+      }
+    })
+    .catch(e => {
+      console.error('Error getting effect settings:', e);
+    });
+
   // Get initial double LED mode status
   fetch('/api/led/double_mode')
     .then(r => r.json())
@@ -171,6 +209,49 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Error setting double LED mode');
       // Revert checkbox on error
       doubleLedMode.checked = !doubleLedMode.checked;
+    }
+  });
+
+  // Effect slider live updates
+  fadeDurationSlider.addEventListener('input', () => {
+    fadeDurationValue.textContent = `${fadeDurationSlider.value}ms`;
+  });
+
+  sustainThresholdSlider.addEventListener('input', () => {
+    sustainThresholdValue.textContent = `${sustainThresholdSlider.value}%`;
+  });
+
+  sparkleIntensitySlider.addEventListener('input', () => {
+    sparkleIntensityValue.textContent = `${sparkleIntensitySlider.value}%`;
+  });
+
+  // Apply effects button
+  applyEffectsBtn.addEventListener('click', async () => {
+    try {
+      const effectSettings = {
+        effect_mode: effectModeSelect.value,
+        velocity_brightness: velocityBrightnessCheckbox.checked,
+        fade_duration_ms: parseInt(fadeDurationSlider.value),
+        sustain_fade_threshold: parseInt(sustainThresholdSlider.value) / 100.0,
+        sparkle_intensity: parseInt(sparkleIntensitySlider.value) / 100.0
+      };
+
+      const response = await fetch('/api/led/effects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(effectSettings)
+      });
+
+      const data = await response.json();
+      if (data.ok) {
+        console.log('Effect settings applied:', data);
+        alert('Effect settings applied successfully!');
+      } else {
+        alert('Failed to apply effects: ' + (data.error || 'Unknown error'));
+      }
+    } catch (e) {
+      console.error('Error applying effects:', e);
+      alert('Error applying effect settings');
     }
   });
 

@@ -382,6 +382,34 @@ class MidiTrackerGUI:
             except Exception as e:
                 return jsonify({'ok': False, 'error': str(e)}), 500
 
+        @app.route('/api/led/effects', methods=['GET', 'POST'])
+        def api_led_effects():
+            try:
+                if request.method == 'GET':
+                    # Get current effect settings
+                    return jsonify({
+                        'ok': True,
+                        **self.led_controller.get_effect_settings()
+                    })
+                else:
+                    # Set effect settings
+                    data = request.get_json()
+                    self.led_controller.set_effect_settings(
+                        effect_mode=data.get('effect_mode'),
+                        velocity_brightness=data.get('velocity_brightness'),
+                        fade_duration_ms=data.get('fade_duration_ms'),
+                        sustain_fade_threshold=data.get('sustain_fade_threshold'),
+                        ripple_spread=data.get('ripple_spread'),
+                        sparkle_intensity=data.get('sparkle_intensity')
+                    )
+                    return jsonify({
+                        'ok': True,
+                        'message': 'Effect settings updated',
+                        **self.led_controller.get_effect_settings()
+                    })
+            except Exception as e:
+                return jsonify({'ok': False, 'error': str(e)}), 500
+
         def run_server():
             # bind only to localhost for security
             app.run(host='127.0.0.1', port=5001, threaded=True, use_reloader=False)

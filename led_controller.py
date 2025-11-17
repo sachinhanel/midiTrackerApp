@@ -76,6 +76,21 @@ class LEDController:
         self.sustain_pedal_hold = False
         self.sustain_pedal_active = False
 
+        # Effect settings
+        self.effect_mode = 'static'  # 'static', 'fade', 'ripple', 'sparkle'
+        self.velocity_brightness = False  # Scale brightness by velocity
+        self.fade_duration_ms = 1000  # How long fade takes (ms)
+        self.sustain_fade_threshold = 0.3  # Brightness level when sustain is held (0.0-1.0)
+        self.ripple_spread = 3  # Number of keys ripple spreads to
+        self.sparkle_intensity = 0.2  # How much sparkle varies (0.0-1.0)
+
+        # Note state tracking for effects
+        self.note_states = {}  # {midi_note: {'velocity': int, 'pressed_time': float, 'released_time': float|None, 'brightness': float}}
+
+        # Animation thread
+        self.animation_running = False
+        self.animation_thread = None
+
         if WS281X_AVAILABLE:
             try:
                 if USING_NEOPIXEL:
@@ -184,18 +199,35 @@ class LEDController:
             print(f"LED note_on: note {midi_note} out of range")
             return
 
-        print(f"LED note_on: note={midi_note} -> LED {led_result}, setting color {self.note_color}")
+        # Track note state for effects
+        self.note_states[midi_note] = {
+            'velocity': velocity,
+            'pressed_time': time.time(),
+            'released_time': None,
+            'brightness': 1.0
+        }
+
+        # Calculate brightness based on velocity if enabled
+        brightness_factor = 1.0
+        if self.velocity_brightness:
+            # Velocity is 0-127, map to 0.3-1.0 (don't go too dim)
+            brightness_factor = 0.3 + (velocity / 127.0) * 0.7
+
+        print(f"LED note_on: note={midi_note} -> LED {led_result}, velocity={velocity}, brightness={brightness_factor:.2f}")
         with self.lock:
             self.active_notes.add(midi_note)
-            # Use configured note color
+            # Use configured note color with brightness scaling
             if self.note_color:
+                r = int(self.note_color[0] * brightness_factor)
+                g = int(self.note_color[1] * brightness_factor)
+                b = int(self.note_color[2] * brightness_factor)
                 if isinstance(led_result, tuple):
                     # Double LED mode
                     for led_index in led_result:
-                        self._set_pixel(led_index, self.note_color[0], self.note_color[1], self.note_color[2])
+                        self._set_pixel(led_index, r, g, b)
                 else:
                     # Single LED mode
-                    self._set_pixel(led_result, self.note_color[0], self.note_color[1], self.note_color[2])
+                    self._set_pixel(led_result, r, g, b)
             self._show()
         print(f"LED note_on: complete for LED {led_result}")
 
@@ -212,9 +244,24 @@ class LEDController:
         if led_result is None:
             return
 
+        # Mark note as released for fade effect
+        if midi_note in self.note_states:
+            self.note_states[midi_note]['released_time'] = time.time()
+
+        # If using fade effect, let the animation thread handle the fade
+        if self.effect_mode == 'fade' and self.animation_running:
+            # Don't immediately turn off - animation thread will fade it
+            with self.lock:
+                if midi_note in self.active_notes:
+                    self.active_notes.discard(midi_note)
+            return
+
         with self.lock:
             if midi_note in self.active_notes:
                 self.active_notes.discard(midi_note)
+            # Clean up note state
+            if midi_note in self.note_states:
+                del self.note_states[midi_note]
             # Turn off or set to background color
             if isinstance(led_result, tuple):
                 # Double LED mode
@@ -379,7 +426,13 @@ class LEDController:
             'background_brightness': self.background_brightness,
             'sustain_pedal_hold': self.sustain_pedal_hold,
             'brightness': self.brightness,
-            'double_led_mode': self.double_led_mode
+            'double_led_mode': self.double_led_mode,
+            'effect_mode': self.effect_mode,
+            'velocity_brightness': self.velocity_brightness,
+            'fade_duration_ms': self.fade_duration_ms,
+            'sustain_fade_threshold': self.sustain_fade_threshold,
+            'ripple_spread': self.ripple_spread,
+            'sparkle_intensity': self.sparkle_intensity
         }
 
         try:
@@ -437,6 +490,16 @@ class LEDController:
             # Apply double LED mode if saved
             if 'double_led_mode' in preset_data:
                 self.set_double_led_mode(preset_data['double_led_mode'])
+
+            # Apply effect settings if saved
+            self.set_effect_settings(
+                effect_mode=preset_data.get('effect_mode', 'static'),
+                velocity_brightness=preset_data.get('velocity_brightness', False),
+                fade_duration_ms=preset_data.get('fade_duration_ms', 1000),
+                sustain_fade_threshold=preset_data.get('sustain_fade_threshold', 0.3),
+                ripple_spread=preset_data.get('ripple_spread', 3),
+                sparkle_intensity=preset_data.get('sparkle_intensity', 0.2)
+            )
 
             print(f"Preset loaded from {preset_file}")
             return True
@@ -551,7 +614,226 @@ class LEDController:
 
     def cleanup(self):
         """Clean up resources"""
+        self.stop_animation()
         self.clear_all()
+
+    def start_animation(self):
+        """Start the animation thread for effects"""
+        if self.animation_running:
+            return
+
+        self.animation_running = True
+        self.animation_thread = threading.Thread(target=self._animation_loop, daemon=True)
+        self.animation_thread.start()
+        print("Animation thread started")
+
+    def stop_animation(self):
+        """Stop the animation thread"""
+        self.animation_running = False
+        if self.animation_thread:
+            self.animation_thread.join(timeout=1.0)
+            self.animation_thread = None
+        print("Animation thread stopped")
+
+    def _animation_loop(self):
+        """Main animation loop - runs at ~30fps"""
+        frame_time = 1.0 / 30.0  # 30 fps
+
+        while self.animation_running:
+            start_time = time.time()
+
+            if self.enabled and self.strip:
+                self._update_effects()
+
+            # Sleep for remaining frame time
+            elapsed = time.time() - start_time
+            sleep_time = frame_time - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+
+    def _update_effects(self):
+        """Update LED colors based on current effect mode"""
+        if self.effect_mode == 'fade':
+            self._update_fade_effect()
+        elif self.effect_mode == 'sparkle':
+            self._update_sparkle_effect()
+        # Add more effects here as needed
+
+    def _update_fade_effect(self):
+        """Update fade effect - gradually dim released notes"""
+        current_time = time.time()
+        notes_to_remove = []
+        needs_update = False
+
+        with self.lock:
+            for midi_note, state in list(self.note_states.items()):
+                led_result = self.midi_note_to_led(midi_note)
+                if led_result is None:
+                    notes_to_remove.append(midi_note)
+                    continue
+
+                # Note is still pressed
+                if state['released_time'] is None:
+                    continue
+
+                # Note has been released - calculate fade
+                elapsed_ms = (current_time - state['released_time']) * 1000
+                fade_progress = min(1.0, elapsed_ms / self.fade_duration_ms)
+
+                # If sustain pedal is held, fade to threshold instead of background
+                if self.sustain_pedal_hold and self.sustain_pedal_active:
+                    target_brightness = self.sustain_fade_threshold
+                else:
+                    target_brightness = 0.0
+
+                # Calculate current brightness
+                start_brightness = 1.0
+                if self.velocity_brightness and 'velocity' in state:
+                    start_brightness = 0.3 + (state['velocity'] / 127.0) * 0.7
+
+                current_brightness = start_brightness - (start_brightness - target_brightness) * fade_progress
+
+                # Update LED color
+                if current_brightness <= 0.01 or (fade_progress >= 1.0 and target_brightness == 0.0):
+                    # Fade complete - set to background
+                    if isinstance(led_result, tuple):
+                        for led_index in led_result:
+                            if self.background_color:
+                                self._set_pixel(led_index, self.background_color[0], self.background_color[1], self.background_color[2])
+                            else:
+                                self._set_pixel(led_index, 0, 0, 0)
+                    else:
+                        if self.background_color:
+                            self._set_pixel(led_result, self.background_color[0], self.background_color[1], self.background_color[2])
+                        else:
+                            self._set_pixel(led_result, 0, 0, 0)
+                    notes_to_remove.append(midi_note)
+                    needs_update = True
+                elif fade_progress >= 1.0 and target_brightness > 0:
+                    # Reached sustain threshold - hold there
+                    if self.note_color:
+                        r = int(self.note_color[0] * target_brightness)
+                        g = int(self.note_color[1] * target_brightness)
+                        b = int(self.note_color[2] * target_brightness)
+                        if isinstance(led_result, tuple):
+                            for led_index in led_result:
+                                self._set_pixel(led_index, r, g, b)
+                        else:
+                            self._set_pixel(led_result, r, g, b)
+                    needs_update = True
+                else:
+                    # Still fading
+                    if self.note_color:
+                        r = int(self.note_color[0] * current_brightness)
+                        g = int(self.note_color[1] * current_brightness)
+                        b = int(self.note_color[2] * current_brightness)
+                        if isinstance(led_result, tuple):
+                            for led_index in led_result:
+                                self._set_pixel(led_index, r, g, b)
+                        else:
+                            self._set_pixel(led_result, r, g, b)
+                    needs_update = True
+
+            # Clean up completed fades
+            for note in notes_to_remove:
+                if note in self.note_states:
+                    del self.note_states[note]
+
+            if needs_update:
+                self._show()
+
+    def _update_sparkle_effect(self):
+        """Update sparkle effect - add random brightness variations"""
+        import random
+        needs_update = False
+
+        with self.lock:
+            for midi_note in self.active_notes:
+                led_result = self.midi_note_to_led(midi_note)
+                if led_result is None:
+                    continue
+
+                state = self.note_states.get(midi_note, {})
+                base_brightness = 1.0
+                if self.velocity_brightness and 'velocity' in state:
+                    base_brightness = 0.3 + (state['velocity'] / 127.0) * 0.7
+
+                # Add random sparkle
+                sparkle = 1.0 + (random.random() - 0.5) * 2 * self.sparkle_intensity
+                brightness = max(0.1, min(1.0, base_brightness * sparkle))
+
+                if self.note_color:
+                    r = int(self.note_color[0] * brightness)
+                    g = int(self.note_color[1] * brightness)
+                    b = int(self.note_color[2] * brightness)
+                    if isinstance(led_result, tuple):
+                        for led_index in led_result:
+                            self._set_pixel(led_index, r, g, b)
+                    else:
+                        self._set_pixel(led_result, r, g, b)
+                needs_update = True
+
+            if needs_update:
+                self._show()
+
+    def set_effect_settings(self, effect_mode=None, velocity_brightness=None, fade_duration_ms=None,
+                            sustain_fade_threshold=None, ripple_spread=None, sparkle_intensity=None):
+        """
+        Set effect settings
+
+        Args:
+            effect_mode: 'static', 'fade', 'ripple', or 'sparkle'
+            velocity_brightness: bool, scale LED brightness by note velocity
+            fade_duration_ms: int, fade duration in milliseconds
+            sustain_fade_threshold: float (0.0-1.0), brightness level when sustain is held
+            ripple_spread: int, number of keys ripple spreads to
+            sparkle_intensity: float (0.0-1.0), how much sparkle varies
+        """
+        if effect_mode is not None:
+            old_mode = self.effect_mode
+            self.effect_mode = effect_mode
+            print(f"Effect mode changed: {old_mode} -> {effect_mode}")
+
+            # Start/stop animation thread as needed
+            if effect_mode in ['fade', 'sparkle', 'ripple']:
+                if not self.animation_running:
+                    self.start_animation()
+            else:
+                if self.animation_running:
+                    self.stop_animation()
+
+        if velocity_brightness is not None:
+            self.velocity_brightness = velocity_brightness
+            print(f"Velocity brightness: {velocity_brightness}")
+
+        if fade_duration_ms is not None:
+            self.fade_duration_ms = max(100, min(10000, fade_duration_ms))
+            print(f"Fade duration: {self.fade_duration_ms}ms")
+
+        if sustain_fade_threshold is not None:
+            self.sustain_fade_threshold = max(0.0, min(1.0, sustain_fade_threshold))
+            print(f"Sustain fade threshold: {self.sustain_fade_threshold}")
+
+        if ripple_spread is not None:
+            self.ripple_spread = max(1, min(10, ripple_spread))
+            print(f"Ripple spread: {self.ripple_spread}")
+
+        if sparkle_intensity is not None:
+            self.sparkle_intensity = max(0.0, min(1.0, sparkle_intensity))
+            print(f"Sparkle intensity: {self.sparkle_intensity}")
+
+        return True
+
+    def get_effect_settings(self):
+        """Get current effect settings"""
+        return {
+            'effect_mode': self.effect_mode,
+            'velocity_brightness': self.velocity_brightness,
+            'fade_duration_ms': self.fade_duration_ms,
+            'sustain_fade_threshold': self.sustain_fade_threshold,
+            'ripple_spread': self.ripple_spread,
+            'sparkle_intensity': self.sparkle_intensity
+        }
 
 
 # Singleton instance
