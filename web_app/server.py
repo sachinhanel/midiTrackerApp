@@ -150,9 +150,9 @@ def api_daily_stats():
     # Query daily_stats table for last 30 days
     try:
         cur = db.conn.cursor()
-        cur.execute("SELECT date, total_notes, session_time_seconds, total_duration_ms, total_bytes, total_energy, avg_velocity FROM daily_stats ORDER BY date DESC LIMIT 60")
+        cur.execute("SELECT date, total_notes, session_time_seconds, total_duration_ms, total_bytes, total_energy, avg_velocity, pedal_presses FROM daily_stats ORDER BY date DESC LIMIT 60")
         rows = cur.fetchall()
-        data = [{'date': r[0], 'total_notes': r[1], 'session_seconds': r[2], 'note_time_ms': r[3], 'total_data': r[4], 'total_energy': r[5], 'avg_velocity': r[6]} for r in rows]
+        data = [{'date': r[0], 'total_notes': r[1], 'session_seconds': r[2], 'note_time_ms': r[3], 'total_data': r[4], 'total_energy': r[5], 'avg_velocity': r[6], 'pedal_presses': r[7] or 0} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -162,9 +162,9 @@ def api_daily_stats():
 def api_hourly_stats():
     try:
         cur = db.conn.cursor()
-        cur.execute("SELECT date, hour, total_notes, session_time_seconds, total_duration_ms, total_bytes, total_energy FROM hourly_stats ORDER BY date DESC, hour DESC LIMIT 240")
+        cur.execute("SELECT date, hour, total_notes, session_time_seconds, total_duration_ms, total_bytes, total_energy, pedal_presses FROM hourly_stats ORDER BY date DESC, hour DESC LIMIT 240")
         rows = cur.fetchall()
-        data = [{'date': r[0], 'hour': r[1], 'total_notes': r[2], 'session_seconds': r[3], 'note_time_ms': r[4], 'total_data': r[5], 'total_energy': r[6]} for r in rows]
+        data = [{'date': r[0], 'hour': r[1], 'total_notes': r[2], 'session_seconds': r[3], 'note_time_ms': r[4], 'total_data': r[5], 'total_energy': r[6], 'pedal_presses': r[7] or 0} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -178,9 +178,10 @@ def api_weekly_stats():
         cur.execute("""
             SELECT sub.week AS week_key, MIN(sub.date) AS week_start, SUM(sub.total_notes) AS total_notes,
                    SUM(sub.session_time_seconds) AS session_seconds, SUM(sub.total_duration_ms) AS note_time_ms,
-                   SUM(sub.total_bytes) AS total_data, SUM(sub.total_energy) AS total_energy
+                   SUM(sub.total_bytes) AS total_data, SUM(sub.total_energy) AS total_energy,
+                   SUM(sub.pedal_presses) AS pedal_presses
             FROM (
-                SELECT date, total_notes, session_time_seconds, total_duration_ms, total_bytes, total_energy, strftime('%Y-%W', date) AS week
+                SELECT date, total_notes, session_time_seconds, total_duration_ms, total_bytes, total_energy, pedal_presses, strftime('%Y-%W', date) AS week
                 FROM daily_stats
             ) AS sub
             GROUP BY sub.week
@@ -188,7 +189,7 @@ def api_weekly_stats():
             LIMIT 52
         """)
         rows = cur.fetchall()
-        data = [{'week_start': r[1], 'week_key': r[0], 'total_notes': r[2] or 0, 'session_seconds': r[3] or 0, 'note_time_ms': r[4] or 0, 'total_data': r[5] or 0, 'total_energy': r[6] or 0} for r in rows]
+        data = [{'week_start': r[1], 'week_key': r[0], 'total_notes': r[2] or 0, 'session_seconds': r[3] or 0, 'note_time_ms': r[4] or 0, 'total_data': r[5] or 0, 'total_energy': r[6] or 0, 'pedal_presses': r[7] or 0} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -203,14 +204,14 @@ def api_monthly_stats():
             SELECT strftime('%Y-%m', date) AS month_key, MIN(date) AS month_start,
                    SUM(total_notes) AS total_notes, SUM(session_time_seconds) AS session_seconds,
                    SUM(total_duration_ms) AS note_time_ms, SUM(total_bytes) AS total_data,
-                   SUM(total_energy) AS total_energy
+                   SUM(total_energy) AS total_energy, SUM(pedal_presses) AS pedal_presses
             FROM daily_stats
             GROUP BY month_key
             ORDER BY month_key DESC
             LIMIT 24
         """)
         rows = cur.fetchall()
-        data = [{'month_start': r[1], 'month_key': r[0], 'total_notes': r[2] or 0, 'session_seconds': r[3] or 0, 'note_time_ms': r[4] or 0, 'total_data': r[5] or 0, 'total_energy': r[6] or 0} for r in rows]
+        data = [{'month_start': r[1], 'month_key': r[0], 'total_notes': r[2] or 0, 'session_seconds': r[3] or 0, 'note_time_ms': r[4] or 0, 'total_data': r[5] or 0, 'total_energy': r[6] or 0, 'pedal_presses': r[7] or 0} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -220,9 +221,9 @@ def api_monthly_stats():
 def api_trends_stats():
     try:
         cur = db.conn.cursor()
-        cur.execute("SELECT date, total_notes, session_time_seconds, total_duration_ms, total_bytes, total_energy FROM daily_stats ORDER BY date DESC LIMIT 1000")
+        cur.execute("SELECT date, total_notes, session_time_seconds, total_duration_ms, total_bytes, total_energy, pedal_presses FROM daily_stats ORDER BY date DESC LIMIT 1000")
         rows = cur.fetchall()
-        data = [{'date': r[0], 'total_notes': r[1], 'session_seconds': r[2], 'note_time_ms': r[3], 'total_data': r[4], 'total_energy': r[5]} for r in rows]
+        data = [{'date': r[0], 'total_notes': r[1], 'session_seconds': r[2], 'note_time_ms': r[3], 'total_data': r[4], 'total_energy': r[5], 'pedal_presses': r[6] or 0} for r in rows]
         return jsonify({'ok': True, 'data': data})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
@@ -287,7 +288,8 @@ def api_all_totals():
     try:
         cur = db.conn.cursor()
         # Use note_distribution counts as authoritative for total_notes (avoids duplication issues)
-        cur.execute("SELECT SUM(count) FROM note_distribution")
+        # Exclude pedal presses (midi_note = -1) from the total notes count
+        cur.execute("SELECT SUM(count) FROM note_distribution WHERE midi_note != -1")
         r_notes = cur.fetchone()
         total_notes = int(r_notes[0] or 0)
 
@@ -320,6 +322,7 @@ def api_all_totals():
             'total_practice_hours': total_practice_hours,
             'total_pedal_presses': total_pedal_presses,
             'total_midi_mb': total_midi_mb,
+            'total_bytes': total_bytes,
             'total_sessions': total_sessions
         }})
     except Exception as e:
@@ -370,11 +373,14 @@ def api_heatmap_distribution():
 
         notes = [{'midi_note': r[0], 'note_name': r[1], 'count': r[2] or 0, 'total_velocity': r[3] or 0,
                   'total_energy': r[4] or 0, 'total_duration_ms': r[5] or 0} for r in rows]
-        total_notes = sum(n['count'] for n in notes)
-        total_energy = sum(n['total_energy'] for n in notes)
-        total_velocity = sum(n['total_velocity'] for n in notes)
+        # Separate pedal presses (midi_note = -1) from actual notes
+        pedal_presses = sum(n['count'] for n in notes if n['midi_note'] == -1)
+        actual_notes = [n for n in notes if n['midi_note'] != -1]
+        total_notes = sum(n['count'] for n in actual_notes)
+        total_energy = sum(n['total_energy'] for n in actual_notes)
+        total_velocity = sum(n['total_velocity'] for n in actual_notes)
         avg_velocity = (total_velocity / total_notes) if total_notes > 0 else 0
-        return jsonify({'ok': True, 'notes': notes, 'totals': {'total_notes': total_notes, 'total_energy': total_energy, 'avg_velocity': avg_velocity}})
+        return jsonify({'ok': True, 'notes': actual_notes, 'totals': {'total_notes': total_notes, 'total_energy': total_energy, 'avg_velocity': avg_velocity, 'pedal_presses': pedal_presses}})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)})
 

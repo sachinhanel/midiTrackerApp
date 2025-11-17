@@ -94,7 +94,7 @@ function renderSimpleTable(container, data){
   if(!data.length){ el.textContent = 'No data'; return; }
 
   // Define standard column order: date fields first, then key fields, then metrics
-  const columnOrder = ['date', 'week_start', 'month_start', 'hour', 'week_key', 'month_key', 'total_notes', 'session_seconds', 'note_time_ms', 'total_data', 'total_energy', 'avg_velocity'];
+  const columnOrder = ['date', 'week_start', 'month_start', 'hour', 'week_key', 'month_key', 'total_notes', 'pedal_presses', 'session_seconds', 'note_time_ms', 'total_data', 'total_energy', 'avg_velocity'];
 
   // Get columns that exist in the data, in the preferred order
   const allKeys = Object.keys(data[0]);
@@ -299,7 +299,18 @@ function formatBigNumber(v){
     if(v >= 1e6) return (v/1e6).toFixed(1)+'M';
     if(v >= 1e3) return (v/1e3).toFixed(1)+'k';
   }
-  return String(Math.round(v));
+  // Long form: add commas for readability
+  return Math.round(v).toLocaleString();
+}
+
+function formatDataSize(bytes){
+  if(bytes === null || bytes === undefined) return '-';
+  if(useShortFormat){
+    // Show in MB
+    return (bytes / (1024.0 * 1024.0)).toFixed(2);
+  }
+  // Long form: show in bytes with commas
+  return Math.round(bytes).toLocaleString();
 }
 
 async function updateStats(){
@@ -314,6 +325,21 @@ async function updateStats(){
   let labels = [];
   let values = [];
 
+  // Helper to convert value based on yKey (e.g., seconds to hours for session_seconds)
+  function convertValue(val){
+    if(yKey === 'session_seconds'){
+      return val / 3600; // Convert seconds to hours
+    }
+    return val;
+  }
+
+  // Determine chart label based on yKey
+  let chartLabel = yKey;
+  if(yKey === 'session_seconds') chartLabel = 'Session Time (hrs)';
+  else if(yKey === 'total_notes') chartLabel = 'Total Notes';
+  else if(yKey === 'total_energy') chartLabel = 'Energy (J)';
+  else if(yKey === 'pedal_presses') chartLabel = 'Pedal Presses';
+
   if(range === 'hourly'){
     // 24 bins for today (hour 0..23)
     const today = new Date().toISOString().slice(0,10);
@@ -322,7 +348,7 @@ async function updateStats(){
     for(let h=0; h<24; h++){
       const hourLabel = `${today} ${String(h).padStart(2,'0')}:00`;
       labels.push(hourLabel);
-      values.push(round2(hourMap[h] || 0));
+      values.push(round2(convertValue(hourMap[h] || 0)));
     }
   } else if(range === 'daily'){
     // last 20 days (including today)
@@ -334,14 +360,14 @@ async function updateStats(){
       dt.setDate(dt.getDate() - i);
       const key = dt.toISOString().slice(0,10);
       labels.push(key + ' 00:00');
-      values.push(round2(dayMap[key] || 0));
+      values.push(round2(convertValue(dayMap[key] || 0)));
     }
   } else if(range === 'monthly'){
     // Prefer server-side monthly aggregation if present
     if(data.length && (data[0].month_key || data[0].month_start)){
       // server returned month_key/month_start and totals (newest first, so reverse to oldest first)
       const reversed = data.slice().reverse();
-      reversed.forEach(d=>{ labels.push((d.month_key || d.month_start) + '-01 00:00'); values.push(round2(Number(d[yKey]||0))); });
+      reversed.forEach(d=>{ labels.push((d.month_key || d.month_start) + '-01 00:00'); values.push(round2(convertValue(Number(d[yKey]||0)))); });
     } else {
       // fallback: aggregate daily rows client-side by month
       const monthMap = {};
@@ -354,21 +380,21 @@ async function updateStats(){
         const m = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const key = m.toISOString().slice(0,7);
         labels.push(key);
-        values.push(round2(monthMap[key] || 0));
+        values.push(round2(convertValue(monthMap[key] || 0)));
       }
     }
   } else if(range === 'weekly'){
     // server returns week_start and totals (newest first, so reverse to oldest first)
     const reversed = data.slice().reverse();
-    reversed.forEach(d=>{ labels.push((d.week_start || d.week_key) + ' 00:00'); values.push(round2(Number(d[yKey]||0))); });
+    reversed.forEach(d=>{ labels.push((d.week_start || d.week_key) + ' 00:00'); values.push(round2(convertValue(Number(d[yKey]||0)))); });
   } else { // trends
     const reversed = data.slice().reverse();
-    reversed.forEach(d=>{ labels.push((d.date||'') + ' 00:00'); values.push(round2(Number(d[yKey]||0))); });
+    reversed.forEach(d=>{ labels.push((d.date||'') + ' 00:00'); values.push(round2(convertValue(Number(d[yKey]||0)))); });
   }
 
   const canvas = document.getElementById('stats_chart');
   console.log(`Sample labels: ${labels.slice(0, 3).join(', ')}`);
-  buildChart(canvas, labels, values, yKey, range);
+  buildChart(canvas, labels, values, chartLabel, range);
   // prepare a simplified table where numbers are rounded
   const normalized = data.map(d=>{
     const copy = Object.assign({}, d);
@@ -517,6 +543,7 @@ async function updateNoteDistribution(){
   // update big totals (for the selected time range - these are the cards in the Note Distribution section)
   const totals = resp.totals || {};
   document.getElementById('total_notes').textContent = formatBigNumber(totals.total_notes || 0);
+  document.getElementById('pedal_presses').textContent = formatBigNumber(totals.pedal_presses || 0);
   document.getElementById('total_energy').textContent = (totals.total_energy || 0).toFixed(2);
   document.getElementById('avg_velocity').textContent = (totals.avg_velocity || 0).toFixed(1);
   // NOTE: Do NOT update the small top totals (_top) - those should always show all-time totals
@@ -566,7 +593,16 @@ function displayAllTimeTotals(){
   if(document.getElementById('total_note_hours_top')) document.getElementById('total_note_hours_top').textContent = (t.total_note_duration_hours || 0).toFixed(1);
   if(document.getElementById('total_practice_hours_top')) document.getElementById('total_practice_hours_top').textContent = (t.total_practice_hours || 0).toFixed(1);
   if(document.getElementById('total_pedal_presses_top')) document.getElementById('total_pedal_presses_top').textContent = formatBigNumber(t.total_pedal_presses || 0);
-  if(document.getElementById('total_midi_mb_top')) document.getElementById('total_midi_mb_top').textContent = (t.total_midi_mb || 0).toFixed(2);
+
+  // Update MIDI data display based on format toggle
+  const midiDataEl = document.getElementById('total_midi_mb_top');
+  const midiLabelEl = document.getElementById('total_midi_label_top');
+  if(midiDataEl){
+    midiDataEl.textContent = formatDataSize(t.total_bytes || 0);
+  }
+  if(midiLabelEl){
+    midiLabelEl.textContent = useShortFormat ? 'MIDI Data (MB)' : 'MIDI Data (bytes)';
+  }
 }
 
 function formatDuration(ms){
@@ -693,7 +729,7 @@ async function updateHeatmap(){
     renderPianoHeatmap('heatmap_piano', counts);
     // legend
     const legend = document.getElementById('heatmap_legend');
-    legend.innerHTML = `<div>Range: ${range}</div><div>Total notes: ${j.totals ? j.totals.total_notes : '-'}</div>`;
+    legend.innerHTML = `<div>Range: ${range}</div>`;
   }catch(e){ console.error('updateHeatmap error', e); }
 }
 

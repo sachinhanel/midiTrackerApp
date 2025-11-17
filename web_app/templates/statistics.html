@@ -19,7 +19,7 @@
   <div class="small_total_card"><div class="small_total_value" id="total_note_hours_top">-</div><div class="small_total_label">Note Duration (hrs)</div></div>
     <div class="small_total_card"><div class="small_total_value" id="total_practice_hours_top">-</div><div class="small_total_label">Practice Hours</div></div>
     <div class="small_total_card"><div class="small_total_value" id="total_pedal_presses_top">-</div><div class="small_total_label">Pedal Presses</div></div>
-    <div class="small_total_card"><div class="small_total_value" id="total_midi_mb_top">-</div><div class="small_total_label">MIDI data (MB)</div></div>
+    <div class="small_total_card"><div class="small_total_value" id="total_midi_mb_top">-</div><div class="small_total_label" id="total_midi_label_top">MIDI Data (MB)</div></div>
   </div>
 
   <!-- Time-series totals box (changes based on selected range) -->
@@ -46,8 +46,9 @@
     <label for="y_select">Y axis:</label>
     <select id="y_select">
       <option value="total_notes">Total Notes</option>
+      <option value="pedal_presses">Pedal Presses</option>
       <option value="total_energy" selected>Energy (J)</option>
-      <option value="session_seconds">Session Time (s)</option>
+      <option value="session_seconds">Session Time (hrs)</option>
     </select>
   </div>
 
@@ -79,6 +80,7 @@
     </div>
     <div id="big_totals" style="margin-top:10px; display:flex; gap:20px;">
       <div class="total_card"><div class="total_value" id="total_notes">-</div><div class="total_label">Total Notes</div></div>
+      <div class="total_card"><div class="total_value" id="pedal_presses">-</div><div class="total_label">Pedal Presses</div></div>
       <div class="total_card"><div class="total_value" id="total_energy">-</div><div class="total_label">Total Energy (J)</div></div>
       <div class="total_card"><div class="total_value" id="avg_velocity">-</div><div class="total_label">Avg Velocity</div></div>
     </div>
