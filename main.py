@@ -912,27 +912,18 @@ class MidiTrackerGUI:
                     # Track bytes for this specific note (3 bytes for note off)
                     self.per_note_bytes[note] += 3
                     
-                    #chord track check pedal remove notes from chord if pedal not pressed
-                    if self.pedal_pressed:
-                        self.sustained_notes.add(note)  # keep sounding
-                    else:
-                        if note in self.active_notes:
-                            del self.active_notes[note]
-                        if note in self.sustained_notes:
-                            self.sustained_notes.discard(note)
-
-                    # Calculate duration if note was being pressed
+                    # Calculate duration if note was being pressed (do this BEFORE removing active note)
                     if note in self.active_notes:
                         duration_ms = (time.time() - self.active_notes[note]['start_time']) * 1000
-                        
+
                         # Track duration for this specific note
                         self.per_note_durations[note] += duration_ms
-                        
+
                         # Update duration statistics
                         self.daily_stats['total_duration_ms'] += duration_ms
                         self.hourly_stats[current_hour]['total_duration_ms'] += duration_ms
-                        
-                        #add to db
+
+                        # add to db
                         date_str = datetime.now().strftime('%Y-%m-%d')
                         operation = {
                             'type': 'note_distribution',
@@ -940,8 +931,26 @@ class MidiTrackerGUI:
                         }
                         self.db_queue.put(operation)
 
+                        # After calculating duration, handle sustain behavior:
+                        # - If pedal is pressed, keep the sounding note tracked in sustained_notes (so it remains in sound),
+                        #   but the key is released so we remove it from active_notes.
+                        # - If pedal not pressed, simply remove from active_notes (sound stops).
+                        if self.pedal_pressed:
+                            # key released but sustain holds the sounding note
+                            self.sustained_notes.add(note)
+
+                        # remove active note entry since key is released
                         del self.active_notes[note]
                         self.add_debug_message(f"🎵 NOTE OFF: {note_name} duration={duration_ms:.1f}ms")
+                    else:
+                        # If we didn't have an active note record, still handle sustain-note clearing logic
+                        if self.pedal_pressed:
+                            # If pedal pressed we consider the note sustained (ensure it's present)
+                            self.sustained_notes.add(note)
+                        else:
+                            # If pedal not pressed and note was sustained, remove it
+                            if note in self.sustained_notes:
+                                self.sustained_notes.discard(note)
 
                     # LED visualization
                     self.led_controller.note_off(note)
